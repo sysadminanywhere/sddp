@@ -1,0 +1,5 @@
+.react-flow { background: #0b1220; }
+.react-flow__node.core-node, .react-flow__node.external-node { color: #eef2ff; border-radius: 9px; padding: 12px; min-width: 180px; border: 1px solid #60a5fa; background: #1e3a5f; }
+.react-flow__node.external-node { background: #4a2c45; border-color: #f472b6; }
+.react-flow__edge-text { fill: #111827; }
+.react-flow__controls button { background: #fff; color: #111827; }

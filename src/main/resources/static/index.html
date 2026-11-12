@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SDDP Designer</title><link rel="stylesheet" href="/designer.css"><link rel="stylesheet" href="/flow/graph.css">
+</head>
+<body>
+  <header><h1>SDDP Designer</h1><span>Contract-first topology control plane</span></header>
+  <main>
+    <section class="toolbar">
+      <label>Project UUID <input id="projectId" placeholder="UUID проекта"></label>
+      <label>Environment <select id="environment"><option>DEV</option><option>STAGE</option><option>PROD</option></select></label>
+      <button id="load">Load topology</button><button id="ir">Build IR</button>
+      <button id="download">Export snapshot</button><label>Import snapshot <input id="importFile" type="file" accept="application/json"></label>
+      <output id="status"></output>
+    </section>
+    <section class="toolbar">
+      <label>Service name <input id="serviceName"></label><label>Type <select id="serviceType"><option value="false">Core</option><option value="true">External</option></select></label><button id="addService">Add service</button>
+      <label>Source <select id="source"></select></label><label>Target <select id="target"></select></label>
+      <label>Contract <select id="contractId"></select></label><label>Transport <select id="transport"><option>REST</option><option>GRPC</option><option>KAFKA</option><option>RABBITMQ</option></select></label>
+      <label>Host <input id="host" value="localhost"></label><label>Port <input id="port" type="number" value="8080"></label><label>Endpoint <input id="endpoint" value="/"></label>
+      <label>Mapping rules JSON <textarea id="mapping" rows="3" placeholder='{"transformations":[]}'></textarea></label><button id="addConnection">Add connection</button>
+    </section>
+    <section class="mapping-editor" aria-labelledby="mappingTitle">
+      <h2 id="mappingTitle">Сопоставление полей</h2>
+      <p>Добавьте правила для связи с внешней системой. Пути задаются в формате <code>$.field.name</code>.</p>
+      <div class="mapping-controls">
+        <label>Исходный контракт <input id="mappingSource" placeholder="internal.order.created.v1"></label>
+        <label>Целевой контракт <input id="mappingTarget" placeholder="external.bank.payment.v3"></label>
+        <button id="addMappingRule" type="button">Добавить правило</button>
+        <button id="previewMapping" type="button">Сформировать JSON</button>
+      </div>
+      <div id="mappingRules"></div>
+    </section>
+    <section class="toolbar">
+      <label>Project name <input id="projectName"></label><button id="createProject">Create project</button>
+      <label>Contract name <input id="contractName"></label><label>Version <input id="contractVersion" value="1"></label>
+      <label>Request JSON Schema <textarea id="requestSchema" rows="3">{"type":"object","properties":{}}</textarea></label>
+      <label>Response JSON Schema <textarea id="responseSchema" rows="3">{"type":"object","properties":{}}</textarea></label>
+      <button id="addContract">Add contract</button>
+    </section>
+    <section class="workspace"><div id="graph" class="graph" style="height:520px"></div><pre id="details">IR output появится здесь.</pre></section>
+  </main>
+  <script src="/designer.js"></script>
+  <script src="/flow/graph.js"></script>
+</body>
+</html>

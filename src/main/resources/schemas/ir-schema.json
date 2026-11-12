@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["system_name", "environment", "generated_at", "services"],
+  "properties": {
+    "system_name": { "type": "string" },
+    "environment": { "type": "string", "enum": ["DEV", "STAGE", "PROD"] },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["service_name", "is_external", "outbound_connections"],
+        "properties": {
+          "service_name": { "type": "string" },
+          "is_external": { "type": "boolean" },
+          "outbound_connections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["client_name", "target_service_name", "transport_type", "connection_settings", "methods"],
+              "properties": {
+                "client_name": { "type": "string" },
+                "target_service_name": { "type": "string" },
+                "transport_type": { "type": "string", "enum": ["REST", "GRPC", "KAFKA", "RABBITMQ"] },
+                "connection_settings": {
+                  "type": "object",
+                  "required": ["host", "port", "target_endpoint"],
+                  "properties": {
+                    "host": { "type": "string" },
+                    "port": { "type": "integer" },
+                    "target_endpoint": { "type": "string" },
+                    "timeout_ms": { "type": "integer" },
+                    "retries": { "type": "integer" },
+                    "security_type": { "type": "string", "enum": ["NONE", "MTLS", "JWT"] }
+                  }
+                },
+                "methods": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["method_name", "pattern", "request_schema", "response_schema"],
+                    "properties": {
+                      "method_name": { "type": "string" },
+                      "pattern": { "type": "string", "enum": ["REQUEST_RESPONSE", "PUB_SUB"] },
+                      "request_schema": { "type": "object" },
+                      "response_schema": { "type": "object" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
