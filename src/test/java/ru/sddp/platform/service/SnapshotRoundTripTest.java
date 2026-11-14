@@ -8,15 +8,21 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SnapshotRoundTripTest {
-    @Test void snapshotSerializesAllEnvironmentsContractsAndMapping() throws Exception {
+    @Test void snapshotSerializesAllEnvironmentsApisAndMapping() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        UUID source=UUID.randomUUID(), target=UUID.randomUUID(), contract=UUID.randomUUID();
+        UUID source=UUID.randomUUID(), target=UUID.randomUUID(), sourceApi=UUID.randomUUID(), targetApi=UUID.randomUUID();
         var mapping=mapper.readTree("{\"transformations\":[{\"type\":\"DIRECT_COPY\",\"from\":\"$.a\",\"to\":\"$.b\"}]}");
         var settings=mapper.readTree("{\"host\":\"example\",\"port\":8080,\"target_endpoint\":\"/\"}");
-        var snapshot=new TopologySnapshot(1,"test",List.of(new TopologySnapshot.Node(source,"source",false),new TopologySnapshot.Node(target,"target",true)),List.of(new TopologySnapshot.Contract(contract,"order","v2",mapper.createObjectNode(),null)),List.of(new TopologySnapshot.Connection("DEV",source,target,contract,"REST",settings,mapping),new TopologySnapshot.Connection("PROD",source,target,contract,"REST",settings,mapping)));
+        var schema=mapper.readTree("{\"type\":\"object\",\"properties\":{}}");
+        var snapshot=new TopologySnapshot(2,"test",
+            List.of(new TopologySnapshot.Service(source,"source","CORE",null),new TopologySnapshot.Service(target,"target","EXTERNAL",null)),
+            List.of(new TopologySnapshot.Api(sourceApi,source,"createOrder","1",null,"REQUEST_RESPONSE",schema,null),
+                new TopologySnapshot.Api(targetApi,target,"createPayment","2",null,"REQUEST_RESPONSE",schema,null)),
+            List.of(new TopologySnapshot.Connection("DEV",source,target,sourceApi,targetApi,"REST",settings,mapping),
+                new TopologySnapshot.Connection("PROD",source,target,sourceApi,targetApi,"REST",settings,mapping)));
         var restored=mapper.readValue(mapper.writeValueAsBytes(snapshot),TopologySnapshot.class);
         assertEquals(2,restored.connections().size());
-        assertEquals("v2",restored.contracts().getFirst().version());
+        assertEquals("2",restored.apis().getLast().version());
         assertEquals(mapping,restored.connections().getFirst().mappingRules());
     }
 }

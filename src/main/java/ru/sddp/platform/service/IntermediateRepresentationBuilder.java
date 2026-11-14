@@ -6,6 +6,8 @@ import com.networknt.schema.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.sddp.platform.api.ApiModels;
+import ru.sddp.platform.domain.ServiceApi;
+import ru.sddp.platform.domain.ServiceType;
 import ru.sddp.platform.domain.TopologyConnection;
 import ru.sddp.platform.repository.ServiceNodeRepository;
 import ru.sddp.platform.repository.TopologyConnectionRepository;
@@ -19,32 +21,41 @@ public class IntermediateRepresentationBuilder {
     private final ProjectService projectService;
     private final ServiceNodeRepository nodes;
     private final TopologyConnectionRepository connections;
+    private final EnvironmentService environments;
     private final ObjectMapper mapper;
-    public IntermediateRepresentationBuilder(ProjectService p, ServiceNodeRepository n, TopologyConnectionRepository c, ObjectMapper mapper) { projectService=p; nodes=n; connections=c; this.mapper=mapper; }
+    public IntermediateRepresentationBuilder(ProjectService p, ServiceNodeRepository n, TopologyConnectionRepository c,
+                                             EnvironmentService environments, ObjectMapper mapper) {
+        projectService=p; nodes=n; connections=c; this.environments=environments; this.mapper=mapper;
+    }
 
     @Transactional(readOnly = true)
     public ApiModels.IrManifest build(UUID projectId, String environment) {
         var project = projectService.require(projectId);
-        var allNodes = nodes.findByProjectId(projectId);
-        var outgoing = connections.findByProjectIdAndEnvironment(projectId, environment).stream().collect(Collectors.groupingBy(c -> c.getSource().getId()));
-        var services = allNodes.stream().map(node -> new ApiModels.IrService(node.getName(), node.isExternal(), outgoing.getOrDefault(node.getId(), List.of()).stream().map(this::connection).toList())).toList();
-        var manifest = new ApiModels.IrManifest(project.getName(), environment, Instant.now(), services);
+        String requested = environment == null || environment.isBlank() ? environments.defaultCode(projectId) : environment;
+        String code = environments.require(projectId, requested).getCode();
+        var allNodes = nodes.findByProjectIdOrderByNameAsc(projectId);
+        var outgoing = connections.findByProjectIdAndEnvironment(projectId, code).stream().collect(Collectors.groupingBy(c -> c.getSource().getId()));
+        var services = allNodes.stream().map(node -> new ApiModels.IrService(node.getName(), node.getServiceType() == ServiceType.EXTERNAL,
+            outgoing.getOrDefault(node.getId(), List.of()).stream().map(this::connection).toList())).toList();
+        var manifest = new ApiModels.IrManifest(project.getName(), code, Instant.now(), services);
         validate(manifest);
         return manifest;
     }
+
     private ApiModels.IrConnection connection(TopologyConnection c) {
         if (!TRANSPORTS.contains(c.getTransportType())) throw new IllegalArgumentException("Unsupported transport: " + c.getTransportType());
         JsonNode settings = c.getConnectionSettings();
         require(settings, "host", "port", "target_endpoint");
-        var contract = c.getContract();
-        if (contract == null) throw new IllegalArgumentException("Connection " + c.getId() + " has no contract");
-        String pattern = Set.of("KAFKA", "RABBITMQ").contains(c.getTransportType()) ? "PUB_SUB" : "REQUEST_RESPONSE";
-        var method = new ApiModels.IrMethod(contract.getName(), pattern, contract.getRequestSchema(), contract.getResponseSchema() == null ? mapper.createObjectNode() : contract.getResponseSchema());
+        ServiceApi targetApi = c.getTargetApi();
+        if (targetApi == null) throw new IllegalArgumentException("Connection " + c.getId() + " has no target API");
+        var method = new ApiModels.IrMethod(targetApi.getName(), targetApi.getPattern().name(),
+            targetApi.getRequestSchema(), targetApi.getResponseSchema() == null ? mapper.createObjectNode() : targetApi.getResponseSchema());
         return new ApiModels.IrConnection(c.getSource().getName(), c.getTarget().getName(), c.getTransportType(), settings, List.of(method), c.getMappingRules());
     }
+
     private void validate(ApiModels.IrManifest manifest) {
         if (manifest.system_name() == null || manifest.system_name().isBlank() || manifest.services() == null) throw new IllegalArgumentException("Invalid IR manifest");
-        if (!Set.of("DEV", "STAGE", "PROD").contains(manifest.environment())) throw new IllegalArgumentException("Invalid environment: " + manifest.environment());
+        if (manifest.environment() == null || manifest.environment().isBlank()) throw new IllegalArgumentException("Invalid environment");
         try (var schemaStream = getClass().getResourceAsStream("/schemas/ir-schema.json")) {
             if (schemaStream == null) throw new IllegalStateException("IR schema resource is missing");
             JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7).getSchema(mapper.readTree(schemaStream));
@@ -52,5 +63,6 @@ public class IntermediateRepresentationBuilder {
             if (!violations.isEmpty()) throw new IllegalArgumentException("IR schema validation failed: " + violations);
         } catch (java.io.IOException e) { throw new IllegalStateException("Cannot load IR schema", e); }
     }
+
     private void require(JsonNode node, String... fields) { for (String field : fields) if (node == null || !node.has(field)) throw new IllegalArgumentException("Missing connection setting: " + field); }
 }

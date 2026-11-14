@@ -13,23 +13,61 @@ mvn spring-boot:run
 
 По умолчанию приложение подключается к `jdbc:postgresql://localhost:5432/sddp`. Параметры можно переопределить через `SddP_DB_URL`, `SddP_DB_USERNAME` и `SddP_DB_PASSWORD`.
 
+## Модель данных
+
+- **Проект** — рабочее пространство интеграции.
+- **Среда** — профиль проекта (`DEV`, `STAGE`, `PROD` по умолчанию): собственный набор связей и настроек подключения. Среды хранятся в БД, у каждой есть код, название, порядок и признак защиты.
+- **Сервис** — узел проекта с типом `CORE`, `EXTERNAL` или `ADAPTER`.
+- **API-операция** — принадлежит сервису: имя, версия, pattern (`REQUEST_RESPONSE` / `PUB_SUB`), request/response JSON Schema.
+- **Связь** — направление между двумя сервисами и конкретными API-операциями в одной среде. Одна связь описывает одну операцию целевого API; несколько операций оформляются несколькими связями.
+
 ## Реализованный API
 
+- `GET /api/v1/projects` — список проектов для выбора активной системы
 - `POST /api/v1/projects` — создать проект (`{"name":"billing"}`)
-- `POST /api/v1/projects/import` — импортировать JSON Topology Snapshot
-- `POST /api/v1/projects/{id}/services` — создать узел сервиса
-- `POST /api/v1/projects/{id}/contracts` — сохранить версионированную JSON-схему
-- `PUT /api/v1/projects/{id}/contracts/{contractId}` — создать совместимую новую версию контракта; существующие связи остаются привязаны к прежней версии
-- `POST /api/v1/projects/{id}/connections` — сохранить связь, транспорт и mapping rules
+- `GET /api/v1/projects/{id}` — карточка проекта
+- `POST /api/v1/projects/import` — импортировать Topology Snapshot (v2 или legacy v1)
+- `GET/POST /api/v1/projects/{id}/services` — список и создание сервисов
+- `GET/PUT /api/v1/projects/{id}/services/{serviceId}` — карточка и настройки сервиса
+- `GET/POST /api/v1/projects/{id}/services/{serviceId}/apis` — список и создание API-операций сервиса
+- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}` — карточка, редактирование и удаление API-операции
+- `POST /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}/versions` — создать совместимую новую версию API; существующие связи остаются на прежней версии
+- `GET /api/v1/projects/{id}/apis` — все API проекта (для редактора связей)
+- `GET/POST /api/v1/projects/{id}/environments` — список и создание сред проекта
+- `PUT/DELETE /api/v1/projects/{id}/environments/{environmentId}` — переименование/защита и удаление среды
+- `GET /api/v1/projects/{id}/environments/compare?sourceEnvironment=DEV&targetEnvironment=STAGE` — сравнить связи и настройки двух сред
+- `POST /api/v1/projects/{id}/connections/copy` — скопировать связи между средами (`MERGE` — добавить недостающие, `REPLACE` — заменить целевой набор)
+- `POST /api/v1/projects/{id}/connections` — создать связь между API-операциями
+- `PUT /api/v1/projects/{id}/connections/{connectionId}` — изменить связь, транспорт, настройки и маппинг
+- `PUT /api/v1/projects/{id}/connections/{connectionId}/mapping` — обновить только правила маппинга
+- `DELETE /api/v1/projects/{id}/connections/{connectionId}` — удалить связь
 - `POST /api/v1/topology/connections` — тот же контракт в формате `{projectId, connection}`
-- `GET /api/v1/projects/{id}/topology?environment=DEV` — получить граф для UI
+- `GET /api/v1/projects/{id}/topology?environment=DEV` — получить сервисы и связи среды для UI
 - `POST /api/v1/projects/{id}/ir?environment=DEV` — собрать и проверить IR-манифест
-- `POST /api/v1/projects/{id}/snapshot?environment=DEV` — скачать JSON Topology Snapshot
+- `POST /api/v1/projects/{id}/snapshot?environment=DEV` — скачать JSON Topology Snapshot v2 (без параметра — все среды)
 - `POST /api/v1/codegen/generate` — сгенерировать Java proxy через FreeMarker; поле `plugin` опционально запускает Docker/Kubernetes executor
+- `GET /api/v1/codegen/plugins` — активные плагины генерации для UI
 - `/actuator/health` — health check
-- `/` — встроенный air-gapped графический дизайнер топологии
 
-Миграции находятся в `src/main/resources/db/migration`. Схема хранит только метаданные, контракты и конфигурацию топологии; поля ПДн и пользовательские токены не предусмотрены.
+## Интерфейс
+
+Выбранный проект и среда хранятся в `localStorage` и синхронизируются с query-параметрами (`?projectId=…&environment=…`), поэтому ссылку на конкретный экран можно передать коллеге.
+
+- `/` (`index.html`) — проекты: создание, импорт snapshot, выбор активного проекта
+- `/project.html?projectId=…` — рабочее пространство проекта с вкладками «Обзор», «Сервисы», «Связи», «Среды», «Сборка»; IR, кодогенерация и snapshot находятся на вкладке «Сборка»
+- `/service.html?projectId=…&serviceId=…` — страница сервиса: настройки, список API-операций и входящие/исходящие связи
+- `/api.html?projectId=…&serviceId=…` — отдельная форма создания API-операции
+- `/api.html?projectId=…&serviceId=…&apiId=…&mode=view|edit|version|delete` — просмотр, редактирование, новая версия и удаление API-операции
+
+API-схемы редактируются как дерево полей (имя, тип, обязательность, описание, вложенные объекты и массивы). JSON Schema генерируется автоматически и показывается только для чтения. Маппинг связи настраивается выбором полей из request-схем исходной и целевой API-операций; JSON-манифест также доступен только как предпросмотр. Список API и формы CRUD разделены: на странице сервиса остаётся компактный список, а создание, просмотр, редактирование, версионирование и удаление открываются на отдельной странице `api.html`.
+
+В интерфейсе показывается только последняя версия каждой API-операции: старые версии остаются в базе для уже существующих связей, но не засоряют список API и выпадающие списки выбора. Удаление API-операции, которая используется в связях, блокируется — сначала нужно изменить или удалить эти связи.
+
+Среды создаются и редактируются на вкладке «Среды»: код, название, порядок и признак «защищённая». Защищённая среда (по умолчанию `PROD`) требует подтверждения для создания, изменения и удаления связей, копирования в неё и собственного удаления; подтверждение передаётся заголовком `X-SDDP-Confirm-Protected: true`. На вкладке также доступны сравнение двух сред (различия `CHANGED`, `MISSING_IN_TARGET`, `MISSING_IN_SOURCE`) и копирование связей в режимах `MERGE` и `REPLACE`. Счётчики связей на обзоре считаются по текущей среде, а snapshot можно выгрузить как по всем средам, так и по одной.
+
+Общие стили и клиент API находятся в `static/app.css` и `static/common.js`, редактор схем — в `static/schema-editor.js`.
+
+Миграции находятся в `src/main/resources/db/migration`. Схема хранит метаданные проектов, сервисов, API-описаний и связей; поля ПДн и пользовательские токены не предусмотрены.
 
 ## Проверка
 

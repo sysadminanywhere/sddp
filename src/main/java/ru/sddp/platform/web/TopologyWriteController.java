@@ -3,25 +3,46 @@ package ru.sddp.platform.web;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import ru.sddp.platform.api.ApiModels;
 import ru.sddp.platform.api.TopologyRequests;
-import ru.sddp.platform.domain.*;
+import ru.sddp.platform.service.EnvironmentService;
 import ru.sddp.platform.service.TopologyWriteService;
-import ru.sddp.platform.service.ContractService;
-import ru.sddp.platform.api.ContractUpdateRequest;
 import java.util.UUID;
 
-@RestController @RequestMapping("/api/v1/projects/{projectId}")
+@RestController
+@RequestMapping("/api/v1/projects/{projectId}")
 public class TopologyWriteController {
-    private final TopologyWriteService topology; private final ContractService contracts; private final ru.sddp.platform.repository.ContractRepository contractRepository; private final ru.sddp.platform.service.ProjectService projects;
-    public TopologyWriteController(TopologyWriteService topology, ContractService contracts, ru.sddp.platform.repository.ContractRepository contractRepository, ru.sddp.platform.service.ProjectService projects) { this.topology = topology; this.contracts = contracts; this.contractRepository = contractRepository; this.projects = projects; }
-    @PostMapping("/services") @ResponseStatus(HttpStatus.CREATED)
-    public ServiceNode service(@PathVariable UUID projectId, @Valid @RequestBody TopologyRequests.CreateServiceRequest request) { return topology.addService(projectId, request); }
-    @PostMapping("/contracts") @ResponseStatus(HttpStatus.CREATED)
-    public Contract contract(@PathVariable UUID projectId, @Valid @RequestBody TopologyRequests.CreateContractRequest request) { return topology.addContract(projectId, request); }
-    @GetMapping("/contracts")
-    public java.util.List<Contract> listContracts(@PathVariable UUID projectId) { projects.require(projectId); return contractRepository.findByProjectId(projectId); }
-    @PutMapping("/contracts/{contractId}")
-    public Contract updateContract(@PathVariable UUID projectId, @PathVariable UUID contractId, @Valid @RequestBody ContractUpdateRequest request) { return contracts.update(projectId, contractId, request); }
+    private final TopologyWriteService topology;
+
+    public TopologyWriteController(TopologyWriteService topology) { this.topology = topology; }
+
     @PostMapping("/connections") @ResponseStatus(HttpStatus.CREATED)
-    public TopologyConnection connection(@PathVariable UUID projectId, @Valid @RequestBody TopologyRequests.CreateConnectionRequest request) { return topology.addConnection(projectId, request); }
+    public ApiModels.Edge connection(@PathVariable UUID projectId, @Valid @RequestBody TopologyRequests.CreateConnectionRequest request,
+                                     @RequestHeader(value = EnvironmentService.CONFIRM_HEADER, defaultValue = "false")
+                                     boolean confirmProtected) {
+        return topology.addConnection(projectId, request, confirmProtected);
+    }
+
+    @PutMapping("/connections/{connectionId}")
+    public ApiModels.Edge updateConnection(@PathVariable UUID projectId, @PathVariable UUID connectionId,
+                                           @Valid @RequestBody TopologyRequests.CreateConnectionRequest request,
+                                           @RequestHeader(value = EnvironmentService.CONFIRM_HEADER, defaultValue = "false")
+                                           boolean confirmProtected) {
+        return topology.updateConnection(projectId, connectionId, request, confirmProtected);
+    }
+
+    @PutMapping("/connections/{connectionId}/mapping")
+    public ApiModels.Edge updateConnectionMapping(@PathVariable UUID projectId, @PathVariable UUID connectionId,
+                                                  @RequestBody TopologyRequests.UpdateConnectionMappingRequest request,
+                                                  @RequestHeader(value = EnvironmentService.CONFIRM_HEADER, defaultValue = "false")
+                                                  boolean confirmProtected) {
+        return topology.updateConnectionMapping(projectId, connectionId, request.mappingRules(), confirmProtected);
+    }
+
+    @DeleteMapping("/connections/{connectionId}") @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteConnection(@PathVariable UUID projectId, @PathVariable UUID connectionId,
+                                 @RequestHeader(value = EnvironmentService.CONFIRM_HEADER, defaultValue = "false")
+                                 boolean confirmProtected) {
+        topology.deleteConnection(projectId, connectionId, confirmProtected);
+    }
 }

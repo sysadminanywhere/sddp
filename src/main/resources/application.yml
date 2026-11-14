@@ -11,6 +11,11 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true
   flyway:
     enabled: true
 management:

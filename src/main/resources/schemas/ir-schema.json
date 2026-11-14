@@ -4,7 +4,7 @@
   "required": ["system_name", "environment", "generated_at", "services"],
   "properties": {
     "system_name": { "type": "string" },
-    "environment": { "type": "string", "enum": ["DEV", "STAGE", "PROD"] },
+    "environment": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "services": {
       "type": "array",

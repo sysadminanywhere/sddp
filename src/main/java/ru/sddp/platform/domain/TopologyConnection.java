@@ -14,16 +14,55 @@ public class TopologyConnection {
     @Column(nullable = false) private String environment;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "source_service_id") private ServiceNode source;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "target_service_id") private ServiceNode target;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "contract_id") private Contract contract;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "source_api_id") private ServiceApi sourceApi;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "target_api_id") private ServiceApi targetApi;
     @Column(name = "transport_type", nullable = false) private String transportType;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "connection_settings", nullable = false, columnDefinition = "jsonb") private JsonNode connectionSettings;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "mapping_rules", columnDefinition = "jsonb") private JsonNode mappingRules;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt = Instant.now();
+
     protected TopologyConnection() { }
-    public TopologyConnection(Project p, String env, ServiceNode source, ServiceNode target, Contract contract, String transport, JsonNode settings, JsonNode mapping) {
-        this.project=p; this.environment=env; this.source=source; this.target=target; this.contract=contract; this.transportType=transport; this.connectionSettings=settings; this.mappingRules=mapping;
+
+    public TopologyConnection(Project project, String environment, ServiceNode source, ServiceNode target,
+                              ServiceApi sourceApi, ServiceApi targetApi, String transportType,
+                              JsonNode connectionSettings, JsonNode mappingRules) {
+        this.project = project;
+        this.environment = environment;
+        this.source = source;
+        this.target = target;
+        this.sourceApi = sourceApi;
+        this.targetApi = targetApi;
+        this.transportType = transportType;
+        this.connectionSettings = connectionSettings;
+        this.mappingRules = mappingRules;
     }
-    public UUID getId() { return id; } public String getEnvironment() { return environment; } public ServiceNode getSource() { return source; }
-    public ServiceNode getTarget() { return target; } public Contract getContract() { return contract; } public String getTransportType() { return transportType; }
-    public JsonNode getConnectionSettings() { return connectionSettings; } public JsonNode getMappingRules() { return mappingRules; }
+
+    public UUID getId() { return id; }
+    public Project getProject() { return project; }
+    public String getEnvironment() { return environment; }
+    public ServiceNode getSource() { return source; }
+    public ServiceNode getTarget() { return target; }
+    public ServiceApi getSourceApi() { return sourceApi; }
+    public ServiceApi getTargetApi() { return targetApi; }
+    public String getTransportType() { return transportType; }
+    public JsonNode getConnectionSettings() { return connectionSettings; }
+    public JsonNode getMappingRules() { return mappingRules; }
+
+    public void update(String environment, ServiceNode source, ServiceNode target, ServiceApi sourceApi, ServiceApi targetApi,
+                       String transportType, JsonNode connectionSettings, JsonNode mappingRules) {
+        this.environment = environment;
+        this.source = source;
+        this.target = target;
+        this.sourceApi = sourceApi;
+        this.targetApi = targetApi;
+        this.transportType = transportType;
+        this.connectionSettings = connectionSettings;
+        this.mappingRules = mappingRules;
+        this.updatedAt = Instant.now();
+    }
+
+    public void updateMapping(JsonNode mapping) {
+        this.mappingRules = mapping;
+        this.updatedAt = Instant.now();
+    }
 }
