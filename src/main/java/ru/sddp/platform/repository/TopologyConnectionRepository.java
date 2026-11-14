@@ -7,4 +7,5 @@ public interface TopologyConnectionRepository extends JpaRepository<TopologyConn
     List<TopologyConnection> findByProjectId(UUID projectId);
     Optional<TopologyConnection> findByIdAndProjectId(UUID id, UUID projectId);
     long countBySourceApiIdOrTargetApiId(UUID sourceApiId, UUID targetApiId);
+    long countBySourceIdOrTargetId(UUID sourceId, UUID targetId);
 }

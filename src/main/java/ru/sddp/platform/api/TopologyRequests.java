@@ -10,7 +10,7 @@ public final class TopologyRequests {
     private TopologyRequests() { }
 
     public record CreateServiceRequest(@NotBlank String name, @NotNull ServiceType serviceType, String description) { }
-    public record UpdateServiceRequest(@NotBlank String name, @NotNull ServiceType serviceType, String description) { }
+    public record UpdateServiceRequest(@NotBlank String name, @NotNull ServiceType serviceType, String description, Integer positionX, Integer positionY) { }
 
     public record CreateApiRequest(@NotBlank String name, @NotBlank String version, String description,
                                    @NotNull ApiPattern pattern, @NotNull JsonNode requestSchema, JsonNode responseSchema) { }

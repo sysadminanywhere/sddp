@@ -11,7 +11,7 @@ public final class ApiModels {
     public record CreateProjectRequest(@NotBlank String name) { }
     public record ProjectResponse(UUID id, String name, Instant createdAt) { }
 
-    public record ServiceResponse(UUID id, String name, String serviceType, String description, Instant createdAt, long apiCount) { }
+    public record ServiceResponse(UUID id, String name, String serviceType, String description, Instant createdAt, long apiCount, Integer positionX, Integer positionY) { }
     public record ServiceApiResponse(UUID id, UUID serviceId, String name, String version, String description,
                                      String pattern, JsonNode requestSchema, JsonNode responseSchema, Instant createdAt) { }
 
@@ -26,10 +26,11 @@ public final class ApiModels {
                                        int copied, int skipped, int removed) { }
 
     public record TopologyResponse(UUID projectId, String environment, List<Node> nodes, List<Edge> edges) { }
-    public record Node(UUID id, String name, String serviceType, String description) { }
+    public record Node(UUID id, String name, String serviceType, String description, Integer positionX, Integer positionY) { }
     public record Edge(UUID id, UUID source, UUID target, UUID sourceApiId, UUID targetApiId,
                        String sourceApi, String targetApi, String transportType,
                        JsonNode connectionSettings, JsonNode mappingRules) { }
+    public record ConnectionDetail(String environment, Edge connection) { }
 
     public record IrManifest(String system_name, String environment, Instant generated_at, List<IrService> services) { }
     public record IrService(String service_name, boolean is_external, List<IrConnection> outbound_connections) { }

@@ -13,6 +13,8 @@ public class ServiceNode {
     @Enumerated(EnumType.STRING) @Column(name = "service_type", nullable = false) private ServiceType serviceType;
     @Column(columnDefinition = "text") private String description;
     @Column(name = "created_at", nullable = false) private Instant createdAt = Instant.now();
+    @Column(name = "position_x") private Integer positionX;
+    @Column(name = "position_y") private Integer positionY;
 
     protected ServiceNode() { }
 
@@ -29,6 +31,9 @@ public class ServiceNode {
     public ServiceType getServiceType() { return serviceType; }
     public String getDescription() { return description; }
     public Instant getCreatedAt() { return createdAt; }
+    public Integer getPositionX() { return positionX; }
+    public Integer getPositionY() { return positionY; }
+    public void setPosition(Integer x, Integer y) { this.positionX = x; this.positionY = y; }
     public boolean isExternal() { return serviceType == ServiceType.EXTERNAL; }
 
     public void update(String name, ServiceType serviceType, String description) {

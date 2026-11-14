@@ -27,9 +27,18 @@ public class TopologyController {
             ? environments.defaultCode(projectId)
             : environments.require(projectId, environment).getCode();
         var nodeResponse = nodes.findByProjectIdOrderByNameAsc(projectId).stream()
-            .map(n -> new ApiModels.Node(n.getId(), n.getName(), n.getServiceType().name(), n.getDescription())).toList();
+            .map(n -> new ApiModels.Node(n.getId(), n.getName(), n.getServiceType().name(), n.getDescription(), n.getPositionX(), n.getPositionY())).toList();
         var edgeResponse = connections.findByProjectIdAndEnvironment(projectId, code).stream().map(this::edge).toList();
         return new ApiModels.TopologyResponse(projectId, code, nodeResponse, edgeResponse);
+    }
+
+    @GetMapping("/connections/{connectionId}")
+    @Transactional(readOnly = true)
+    public ApiModels.ConnectionDetail connection(@PathVariable UUID projectId, @PathVariable UUID connectionId) {
+        projects.require(projectId);
+        var connection = connections.findByIdAndProjectId(connectionId, projectId)
+            .orElseThrow(() -> new ru.sddp.platform.service.ResourceNotFoundException("Connection not found: " + connectionId));
+        return new ApiModels.ConnectionDetail(connection.getEnvironment(), edge(connection));
     }
 
     @PostMapping("/ir")
