@@ -8,7 +8,6 @@ on:
     branches: [main]
 
 env:
-  REGISTRY_GHCR: ghcr.io
   REGISTRY_DOCKERHUB: docker.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -51,12 +50,41 @@ jobs:
           CLEAN_VERSION=${VERSION%-SNAPSHOT}
           echo "clean_version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
 
+      - name: Verify release tag matches project version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          PROJECT_VERSION: ${{ steps.maven-version.outputs.version }}
+        run: |
+          [[ "$PROJECT_VERSION" != *-SNAPSHOT ]] || { echo 'Release versions cannot be snapshots'; exit 1; }
+          [[ "${GITHUB_REF_NAME#v}" == "$PROJECT_VERSION" ]] || { echo 'Release tag must match pom.xml version'; exit 1; }
+
       - name: Build and test with Maven
         run: mvn -B verify
         env:
           SddP_DB_URL: jdbc:postgresql://localhost:5432/sddp
           SddP_DB_USERNAME: sddp
           SddP_DB_PASSWORD: sddp
+
+      - name: Verify snapshot against PostgreSQL and Flyway migrations
+        run: mvn -B -Dtest=SnapshotPostgresIntegrationTest test
+        env:
+          SDDP_POSTGRES_IT: "true"
+          SddP_DB_URL: jdbc:postgresql://localhost:5432/sddp
+          SddP_DB_USERNAME: sddp
+          SddP_DB_PASSWORD: sddp
+
+      - name: Verify HTTPS gateway authentication and Origin checks
+        run: bash scripts/test-gateway.sh
+
+      - name: Verify production Compose and database recovery
+        run: bash scripts/test-compose-recovery.sh
+        env:
+          SDDP_TEST_BROWSER: "1"
+
+      - name: Verify upgrade and rollback against the previous revision
+        run: bash scripts/test-upgrade-rollback.sh
+        env:
+          SDDP_UPGRADE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
 
       - name: Upload test reports
         if: always()
@@ -66,12 +94,14 @@ jobs:
           path: target/surefire-reports/
 
   docker:
-    needs: test
+    needs: [test, docker-plugin-test]
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     permissions:
       contents: read
-      packages: write
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -91,64 +121,51 @@ jobs:
         run: |
           SHA=$(git rev-parse --short HEAD)
           VERSION=${{ steps.maven-version.outputs.clean_version }}
-          TAGS=""
+          IMAGE_NAME=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
+          REGS=()
+          if [[ -n "$DOCKERHUB_USERNAME" && -n "$DOCKERHUB_TOKEN" ]]; then
+            REGS+=("${REGISTRY_DOCKERHUB}/${IMAGE_NAME}")
+          fi
 
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             # Tag push: v1.2.3 -> tag as 1.2.3, also major.minor
             TAG_VERSION=${GITHUB_REF_NAME#v}
-            TAGS="${TAGS}${REGISTRY_GHCR}/${IMAGE_NAME}:${TAG_VERSION},${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:${TAG_VERSION}"
-            # Major.minor tag
             MAJOR_MINOR=$(echo $TAG_VERSION | cut -d. -f1,2)
-            TAGS="${TAGS},${REGISTRY_GHCR}/${IMAGE_NAME}:${MAJOR_MINOR},${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:${MAJOR_MINOR}"
-            # Latest on release tags
-            TAGS="${TAGS},${REGISTRY_GHCR}/${IMAGE_NAME}:latest,${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:latest"
+            VERSIONS=("$TAG_VERSION" "$MAJOR_MINOR" latest)
           else
             # Main branch: version-SHA, clean_version, latest
-            TAGS="${TAGS}${REGISTRY_GHCR}/${IMAGE_NAME}:${VERSION}-${SHA},${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:${VERSION}-${SHA}"
-            TAGS="${TAGS},${REGISTRY_GHCR}/${IMAGE_NAME}:${VERSION},${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:${VERSION}"
-            TAGS="${TAGS},${REGISTRY_GHCR}/${IMAGE_NAME}:latest,${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:latest"
+            VERSIONS=("${VERSION}-${SHA}" "$VERSION" latest)
           fi
-
-          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          {
+            echo 'tags<<EOF'
+            for registry in "${REGS[@]}"; do
+              for version in "${VERSIONS[@]}"; do echo "${registry}:${version}"; done
+            done
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY_GHCR }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
         with:
           registry: ${{ env.REGISTRY_DOCKERHUB }}
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}
-            ${{ env.REGISTRY_DOCKERHUB }}/${{ env.IMAGE_NAME }}
-          tags: ${{ steps.tags.outputs.tags }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.maven-version.outputs.clean_version }}
-
       - name: Build and push Docker image
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.maven-version.outputs.clean_version }}
           build-args: |
             VERSION=${{ steps.maven-version.outputs.clean_version }}
             GITHUB_REPOSITORY=${{ github.repository }}
@@ -158,7 +175,6 @@ jobs:
   docker-plugin-test:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
     steps:

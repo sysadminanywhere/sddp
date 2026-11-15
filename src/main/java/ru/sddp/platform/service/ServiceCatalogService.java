@@ -1,6 +1,6 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.sddp.platform.api.ApiModels;

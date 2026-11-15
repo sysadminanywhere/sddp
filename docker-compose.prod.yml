@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: sddp
       POSTGRES_USER: sddp
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sddp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a strong unique password}
     volumes:
       - sddp-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -21,14 +19,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE_NAME:-ghcr.io/${GITHUB_REPOSITORY}}:latest
+    image: ${IMAGE_NAME:-sddp}:latest
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SddP_DB_URL: jdbc:postgresql://postgres:5432/sddp
       SddP_DB_USERNAME: sddp
-      SddP_DB_PASSWORD: ${POSTGRES_PASSWORD:-sddp}
+      SddP_DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a strong unique password}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy

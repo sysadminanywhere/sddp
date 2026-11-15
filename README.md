@@ -40,9 +40,8 @@ SDDP is an open-source platform for **spec-driven integration development**. Def
 - Single `POST /ir` builds validated manifest for any environment
 - Services, outbound connections, methods, mapping rules — ready for codegen or external tools
 
-### 📦 **Topology Snapshots (v2)**
-- Export/import full project state (services, APIs, connections, environments)
-- Migration path from legacy v1 contracts
+### 📦 **Topology Snapshots (v1)**
+- Export/import services, API schemas, connections, environment settings, and graph positions
 - Versioned, portable JSON — perfect for GitOps or environment seeding
 
 ### ⚡ **Code Generation**
@@ -69,6 +68,8 @@ mvn spring-boot:run
 ```
 
 **Default profiles:** `docker` (local), `k8s` (Kubernetes executor).
+
+The application has no built-in authentication. Keep it on a trusted host or network; for remote access, put it behind an authenticated HTTPS gateway and restrict direct access. See the security guidance in [Technical Reference](TECHNICAL.md#security-model).
 
 ---
 
@@ -120,9 +121,6 @@ mvn spring-boot:run
 | Document | Description |
 |----------|-------------|
 | [Technical Reference](TECHNICAL.md) | API reference, data model, configuration, deployment |
-| [API Specification](docs/api.md) | OpenAPI / endpoint catalog |
-| [Development Guide](docs/development.md) | Local setup, frontend build, testing |
-| [Migration Guide](docs/migration.md) | v1 → v2 snapshot migration |
 
 ---
 
@@ -132,10 +130,10 @@ mvn spring-boot:run
 - ✅ Full CRUD for projects, services, APIs, connections, environments
 - ✅ Graph editor with validation & persistence
 - ✅ Environment comparison & promotion
-- ✅ IR build + Snapshot v2 export/import
+- ✅ IR build + Snapshot v1 export/import
 - ✅ Java codegen (built-in + plugin framework)
-- ✅ 44 tests passing (unit + Docker integration)
-- ✅ CI/CD: GitHub Actions → GHCR + Docker Hub
+- ✅ Automated unit and integration tests
+- ✅ CI/CD: GitHub Actions → Docker Hub when credentials are configured
 
 ---
 

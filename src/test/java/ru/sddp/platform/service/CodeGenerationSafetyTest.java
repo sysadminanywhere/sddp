@@ -1,6 +1,6 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import freemarker.template.Configuration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -16,7 +16,7 @@ import static org.mockito.Mockito.*;
 
 class CodeGenerationSafetyTest {
     @Test void refusesToGenerateInsecureClientForMtls() throws Exception {
-        var mapper = new ObjectMapper();
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
         var settings = mapper.readTree("{\"host\":\"legacy\",\"port\":443,\"target_endpoint\":\"/\",\"security_type\":\"MTLS\"}");
         var method = new ApiModels.IrMethod("send", "REQUEST_RESPONSE", mapper.createObjectNode(), mapper.createObjectNode());
         var connection = new ApiModels.IrConnection("client", "legacy", "REST", settings, List.of(method), null);

@@ -1,0 +1,21 @@
+{$SDDP_DOMAIN} {
+	# All requests require authentication; passwords are supplied as bcrypt hashes.
+	basic_auth {
+		{env.SDDP_USER} {env.SDDP_PASSWORD_HASH}
+	}
+
+	# Browser state-changing requests must originate from this exact HTTPS site.
+	@bad_origin {
+		not method GET HEAD OPTIONS
+		not header Origin https://{$SDDP_DOMAIN}
+	}
+	respond @bad_origin "Forbidden" 403
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+	}
+	reverse_proxy app:8080
+}

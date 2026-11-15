@@ -1,11 +1,11 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BackwardCompatibilityEngineTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
     private final BackwardCompatibilityEngine engine = new BackwardCompatibilityEngine();
     @Test void rejectsNestedBreakingChanges() throws Exception {
         var oldSchema = mapper.readTree("{\"properties\":{\"order\":{\"properties\":{\"id\":{}}}}}");

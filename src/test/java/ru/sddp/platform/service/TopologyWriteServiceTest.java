@@ -1,6 +1,6 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import ru.sddp.platform.domain.Project;
 import ru.sddp.platform.domain.ProjectEnvironment;
@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class TopologyWriteServiceTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
 
     private TopologyWriteService service(TopologyConnectionRepository connections) {
         var environments = mock(EnvironmentService.class);

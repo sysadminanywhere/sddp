@@ -1,11 +1,11 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ApiSchemaValidatorTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
     private final ApiSchemaValidator validator = new ApiSchemaValidator();
     @Test void permitsLocalReferences() throws Exception {
         var schema = mapper.readTree("{\"$defs\":{\"id\":{\"type\":\"string\"}},\"$ref\":\"#/$defs/id\"}");
@@ -17,6 +17,10 @@ class ApiSchemaValidatorTest {
     }
     @Test void rejectsNonObjectSchemas() throws Exception {
         var schema = mapper.readTree("[]");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(schema));
+    }
+    @Test void rejectsInvalidSchemaTypes() throws Exception {
+        var schema = mapper.readTree("{\"type\":\"not-a-json-schema-type\"}");
         assertThrows(IllegalArgumentException.class, () -> validator.validate(schema));
     }
 }

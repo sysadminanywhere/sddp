@@ -3,7 +3,7 @@ package ru.sddp.platform.web;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import ru.sddp.platform.api.ApiModels;
 import ru.sddp.platform.service.ProjectService;
 import ru.sddp.platform.service.ServiceCatalogService;

@@ -4,7 +4,7 @@ import ru.sddp.platform.api.TopologyRequests;
 import ru.sddp.platform.api.ApiModels;
 import ru.sddp.platform.domain.*;
 import ru.sddp.platform.repository.*;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Set;

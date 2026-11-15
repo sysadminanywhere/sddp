@@ -3,7 +3,7 @@ package ru.sddp.platform.web;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.*;
 import org.springframework.transaction.annotation.Transactional;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import ru.sddp.platform.api.ApiModels;
 import ru.sddp.platform.domain.ServiceApi;
 import ru.sddp.platform.domain.TopologyConnection;
@@ -46,7 +46,7 @@ public class TopologyController {
 
     @PostMapping(value = "/snapshot", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> snapshot(@PathVariable UUID projectId,
-                                           @RequestParam(required = false) String environment) throws com.fasterxml.jackson.core.JsonProcessingException {
+                                           @RequestParam(required = false) String environment) {
         byte[] payload = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(snapshots.export(projectId, environment));
         String suffix = environment == null || environment.isBlank()
             ? "" : "-" + environment.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_-]", "-");

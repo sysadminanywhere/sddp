@@ -1,0 +1,6 @@
+services:
+  app:
+    ports: !reset []
+  gateway:
+    ports: !override
+      - "127.0.0.1:${SDDP_TEST_PORT:-0}:18443"

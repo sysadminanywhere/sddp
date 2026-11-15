@@ -1,6 +1,6 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import ru.sddp.platform.api.TopologyRequests;
 import ru.sddp.platform.domain.*;
@@ -15,7 +15,7 @@ import static org.mockito.Mockito.*;
 
 class ServiceCatalogServiceTest {
     @Test void newApiVersionPreservesOriginalOperation() throws Exception {
-        var mapper = new ObjectMapper();
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
         var oldSchema = mapper.readTree("{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}");
         var nextSchema = mapper.readTree("{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"note\":{\"type\":\"string\"}}}");
         var project = new Project("test");
@@ -43,7 +43,7 @@ class ServiceCatalogServiceTest {
     }
 
     @Test void updateApiEditsExistingVersionInPlace() throws Exception {
-        var mapper = new ObjectMapper();
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
         var oldSchema = mapper.readTree("{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}");
         var nextSchema = mapper.readTree("{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"amount\":{\"type\":\"integer\"}}}");
         var project = new Project("test");
@@ -70,7 +70,7 @@ class ServiceCatalogServiceTest {
     }
 
     @Test void deleteApiRemovesUnusedOperation() throws Exception {
-        var mapper = new ObjectMapper();
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
         var schema = mapper.readTree("{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}");
         var project = new Project("test");
         var service = new ServiceNode(project, "payments", ServiceType.CORE, null);
@@ -93,7 +93,7 @@ class ServiceCatalogServiceTest {
     }
 
     @Test void deleteApiRejectsOperationUsedByConnections() throws Exception {
-        var mapper = new ObjectMapper();
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
         var schema = mapper.readTree("{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}");
         var project = new Project("test");
         var service = new ServiceNode(project, "payments", ServiceType.CORE, null);

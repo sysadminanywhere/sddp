@@ -1,7 +1,6 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.sddp.platform.api.ApiModels;
@@ -11,115 +10,60 @@ import java.util.*;
 
 @Service
 public class SnapshotImportService {
-    private final ObjectMapper mapper;
     private final ProjectRepository projects;
     private final ServiceNodeRepository nodes;
     private final ServiceApiRepository apis;
     private final TopologyConnectionRepository connections;
     private final ApiSchemaValidator schemaValidator;
     private final ConnectionValidator connectionValidator;
-    private final EnvironmentService environments;
+    private final ProjectEnvironmentRepository environmentRepository;
 
-    public SnapshotImportService(ObjectMapper mapper, ProjectRepository p, ServiceNodeRepository n, ServiceApiRepository a,
+    public SnapshotImportService(ProjectRepository p, ServiceNodeRepository n, ServiceApiRepository a,
                                  TopologyConnectionRepository tc, ApiSchemaValidator schemaValidator,
-                                 ConnectionValidator connectionValidator, EnvironmentService environments) {
-        this.mapper=mapper; projects=p; nodes=n; apis=a; connections=tc;
-        this.schemaValidator=schemaValidator; this.connectionValidator=connectionValidator; this.environments=environments;
+                                 ConnectionValidator connectionValidator,
+                                 ProjectEnvironmentRepository environmentRepository) {
+        projects=p; nodes=n; apis=a; connections=tc;
+        this.schemaValidator=schemaValidator; this.connectionValidator=connectionValidator;
+        this.environmentRepository = environmentRepository;
     }
 
     @Transactional
     public ApiModels.ProjectResponse importSnapshot(JsonNode snapshot) {
         if (snapshot == null || !snapshot.isObject()) throw new IllegalArgumentException("Invalid topology snapshot");
-        int version = snapshot.path("formatVersion").asInt(0);
+        JsonNode versionNode = snapshot.get("formatVersion");
+        if (versionNode == null || !versionNode.isIntegralNumber() || !versionNode.canConvertToInt())
+            throw new IllegalArgumentException("Invalid topology snapshot: formatVersion must be an integer");
+        int version = versionNode.intValue();
+        if (version != 1) throw new IllegalArgumentException("Unsupported topology snapshot format version: " + version);
         String projectName = requiredText(snapshot, "projectName");
         String importedName = projectName;
         if (projects.existsByName(importedName)) importedName = importedName + "-imported-" + UUID.randomUUID().toString().substring(0, 8);
         Project project = projects.save(new Project(importedName));
-        environments.ensureDefaults(project);
-        for (JsonNode environment : snapshot.path("environments")) {
-            if (environment.isTextual() && !environment.asText().isBlank()) {
-                environments.ensure(project, environment.asText());
-            }
+        JsonNode environmentNodes = requiredArray(snapshot, "environments");
+        if (environmentNodes.isEmpty()) throw new IllegalArgumentException("Invalid topology snapshot: environments must not be empty");
+        Set<String> environmentCodes = new HashSet<>();
+        for (JsonNode environment : environmentNodes) {
+            if (!environment.isObject()) throw new IllegalArgumentException("Invalid topology snapshot: environment must be an object");
+            String code = EnvironmentService.normalizeCode(requiredText(environment, "code"));
+            if (!environmentCodes.add(code)) throw new IllegalArgumentException("Duplicate environment: " + code);
+            JsonNode position = environment.get("position"), protectedFlag = environment.get("isProtected");
+            if (position == null || !position.isIntegralNumber() || !position.canConvertToInt()) throw new IllegalArgumentException("Invalid environment position");
+            if (protectedFlag == null || !protectedFlag.isBoolean()) throw new IllegalArgumentException("Invalid environment isProtected");
+            environmentRepository.save(new ProjectEnvironment(project, code, requiredText(environment, "name"), position.intValue(), protectedFlag.booleanValue()));
         }
-        if (version == 1) importV1(snapshot, project);
-        else if (version == 2) importV2(snapshot, project);
-        else throw new IllegalArgumentException("Unsupported topology snapshot format version: " + version);
+        importSnapshotData(snapshot, project, environmentCodes);
         return new ApiModels.ProjectResponse(project.getId(), project.getName(), project.getCreatedAt());
     }
 
-    /** Imports the legacy snapshot shape where contracts are project-scoped and connections point at them. */
-    private void importV1(JsonNode root, Project project) {
+    private void importSnapshotData(JsonNode root, Project project, Set<String> environmentCodes) {
         Map<UUID, ServiceNode> serviceMap = new HashMap<>();
         for (JsonNode service : requiredArray(root, "services")) {
             UUID id = requiredUuid(service, "id");
             if (serviceMap.containsKey(id)) throw new IllegalArgumentException("Invalid service ID");
-            boolean external = service.path("external").asBoolean(false);
-            serviceMap.put(id, nodes.save(new ServiceNode(project, requiredText(service, "name"),
-                external ? ServiceType.EXTERNAL : ServiceType.CORE, null)));
-        }
-
-        Map<UUID, JsonNode> contractMap = new LinkedHashMap<>();
-        for (JsonNode contract : requiredArray(root, "contracts")) {
-            UUID id = requiredUuid(contract, "id");
-            if (contractMap.put(id, contract) != null) throw new IllegalArgumentException("Invalid contract ID");
-            schemaValidator.validate(requiredSchema(contract, "requestSchema"));
-            JsonNode response = optionalSchema(contract, "responseSchema");
-            if (response != null) schemaValidator.validate(response);
-        }
-
-        JsonNode connectionNodes = requiredArray(root, "connections");
-        Map<UUID, Set<UUID>> contractTargets = new LinkedHashMap<>();
-        Map<UUID, Boolean> contractPubSub = new HashMap<>();
-        for (JsonNode connection : connectionNodes) {
-            UUID contractId = optionalUuid(connection, "contractId");
-            if (contractId == null) continue;
-            UUID targetId = requiredUuid(connection, "targetId");
-            if (!serviceMap.containsKey(targetId)) throw new IllegalArgumentException("Snapshot references unknown service");
-            contractTargets.computeIfAbsent(contractId, key -> new LinkedHashSet<>()).add(targetId);
-            contractPubSub.merge(contractId, Set.of("KAFKA", "RABBITMQ").contains(requiredText(connection, "transportType")), (left, right) -> left || right);
-        }
-
-        Map<UUID, Map<UUID, ServiceApi>> apiMap = new HashMap<>();
-        for (var entry : contractTargets.entrySet()) {
-            JsonNode contract = contractMap.get(entry.getKey());
-            if (contract == null) throw new IllegalArgumentException("Snapshot references unknown contract");
-            boolean pubSub = contractPubSub.getOrDefault(entry.getKey(), false);
-            for (UUID targetId : entry.getValue()) {
-                ServiceApi api = apis.save(new ServiceApi(serviceMap.get(targetId), requiredText(contract, "name"),
-                    requiredText(contract, "version"), "Imported from snapshot v1",
-                    pubSub ? ApiPattern.PUB_SUB : ApiPattern.REQUEST_RESPONSE,
-                    requiredSchema(contract, "requestSchema"), optionalSchema(contract, "responseSchema")));
-                apiMap.computeIfAbsent(entry.getKey(), key -> new HashMap<>()).put(targetId, api);
-            }
-        }
-
-        for (JsonNode connection : connectionNodes) {
-            String environment = environments.ensure(project, requiredText(connection, "environment")).getCode();
-            String transportType = requiredText(connection, "transportType");
-            JsonNode settings = requiredSchema(connection, "connectionSettings");
-            JsonNode mapping = optionalSchema(connection, "mappingRules");
-            connectionValidator.validate(environment, transportType, settings, mapping);
-            UUID sourceId = requiredUuid(connection, "sourceId");
-            UUID targetId = requiredUuid(connection, "targetId");
-            ServiceNode source = serviceMap.get(sourceId);
-            ServiceNode target = serviceMap.get(targetId);
-            if (source == null || target == null) throw new IllegalArgumentException("Snapshot references unknown service");
-            UUID contractId = optionalUuid(connection, "contractId");
-            ServiceApi targetApi = contractId == null ? null : apiMap.get(contractId).get(targetId);
-            if (contractId != null && targetApi == null) throw new IllegalArgumentException("Snapshot references unknown contract");
-            connections.save(new TopologyConnection(project, environment, source, target, null, targetApi,
-                transportType, settings, mapping));
-        }
-    }
-
-    private void importV2(JsonNode root, Project project) {
-        Map<UUID, ServiceNode> serviceMap = new HashMap<>();
-        for (JsonNode service : requiredArray(root, "services")) {
-            UUID id = requiredUuid(service, "id");
-            if (serviceMap.containsKey(id)) throw new IllegalArgumentException("Invalid service ID");
-            ServiceType type = parseEnum(ServiceType.class, service.path("serviceType").asText("CORE"), "service type");
-            serviceMap.put(id, nodes.save(new ServiceNode(project, requiredText(service, "name"), type,
-                optionalText(service, "description"))));
+            ServiceType type = parseEnum(ServiceType.class, requiredText(service, "serviceType"), "service type");
+            ServiceNode node = new ServiceNode(project, requiredText(service, "name"), type, optionalText(service, "description"));
+            node.setPosition(optionalInteger(service, "positionX"), optionalInteger(service, "positionY"));
+            serviceMap.put(id, nodes.save(node));
         }
 
         Map<UUID, ServiceApi> apiMap = new HashMap<>();
@@ -129,7 +73,7 @@ public class SnapshotImportService {
             UUID serviceId = requiredUuid(api, "serviceId");
             ServiceNode service = serviceMap.get(serviceId);
             if (service == null) throw new IllegalArgumentException("Snapshot references unknown service");
-            ApiPattern pattern = parseEnum(ApiPattern.class, api.path("pattern").asText("REQUEST_RESPONSE"), "API pattern");
+            ApiPattern pattern = parseEnum(ApiPattern.class, requiredText(api, "pattern"), "API pattern");
             schemaValidator.validate(requiredSchema(api, "requestSchema"));
             JsonNode response = optionalSchema(api, "responseSchema");
             if (response != null) schemaValidator.validate(response);
@@ -138,7 +82,8 @@ public class SnapshotImportService {
         }
 
         for (JsonNode connection : requiredArray(root, "connections")) {
-            String environment = environments.ensure(project, requiredText(connection, "environment")).getCode();
+            String environment = EnvironmentService.normalizeCode(requiredText(connection, "environment"));
+            if (!environmentCodes.contains(environment)) throw new IllegalArgumentException("Snapshot references unknown environment: " + environment);
             String transportType = requiredText(connection, "transportType");
             JsonNode settings = requiredSchema(connection, "connectionSettings");
             JsonNode mapping = optionalSchema(connection, "mappingRules");
@@ -173,6 +118,13 @@ public class SnapshotImportService {
         return value;
     }
 
+    private Integer optionalInteger(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) return null;
+        if (!value.isIntegralNumber() || !value.canConvertToInt()) throw new IllegalArgumentException("Invalid integer in " + field);
+        return value.intValue();
+    }
+
     private UUID requiredUuid(JsonNode node, String field) {
         String value = requiredText(node, field);
         try { return UUID.fromString(value); }
@@ -194,7 +146,9 @@ public class SnapshotImportService {
 
     private String optionalText(JsonNode node, String field) {
         JsonNode value = node.get(field);
-        return value == null || !value.isTextual() || value.asText().isBlank() ? null : value.asText();
+        if (value == null || value.isNull()) return null;
+        if (!value.isTextual()) throw new IllegalArgumentException("Invalid topology snapshot: " + field + " must be a string");
+        return value.asText().isBlank() ? null : value.asText();
     }
 
     private JsonNode requiredSchema(JsonNode node, String field) {

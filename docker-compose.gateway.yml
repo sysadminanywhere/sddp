@@ -1,0 +1,24 @@
+services:
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SDDP_DOMAIN: ${SDDP_DOMAIN:?Set SDDP_DOMAIN to your public DNS name}
+      SDDP_USER: ${SDDP_USER:?Set SDDP_USER}
+      SDDP_PASSWORD_HASH: ${SDDP_PASSWORD_HASH:?Set SDDP_PASSWORD_HASH to a bcrypt hash}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - sddp-caddy-data:/data
+      - sddp-caddy-config:/config
+    depends_on:
+      - app
+    networks:
+      - sddp-net
+
+volumes:
+  sddp-caddy-data:
+  sddp-caddy-config:

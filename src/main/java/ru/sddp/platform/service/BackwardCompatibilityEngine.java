@@ -1,6 +1,6 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 import java.util.*;
 
@@ -26,6 +26,6 @@ public class BackwardCompatibilityEngine {
         for (String name : common) addedRequiredProperties(previous.path("properties").path(name), next.path("properties").path(name));
         if (previous != null && next != null && previous.path("items").isObject() && next.path("items").isObject()) addedRequiredProperties(previous.path("items"), next.path("items"));
     }
-    private Set<String> propertyNames(JsonNode schema) { Set<String> result = new HashSet<>(); if (schema != null && schema.path("properties").isObject()) schema.path("properties").fieldNames().forEachRemaining(result::add); return result; }
+    private Set<String> propertyNames(JsonNode schema) { Set<String> result = new HashSet<>(); if (schema != null && schema.path("properties").isObject()) result.addAll(schema.path("properties").propertyNames()); return result; }
     private Set<String> required(JsonNode schema) { Set<String> result = new HashSet<>(); if (schema != null && schema.path("required").isArray()) schema.path("required").forEach(n -> result.add(n.asText())); return result; }
 }

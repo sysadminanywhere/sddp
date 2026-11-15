@@ -1,6 +1,6 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import ru.sddp.platform.domain.Project;
 import ru.sddp.platform.domain.ProjectEnvironment;
@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class EnvironmentComparisonServiceTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
     private final EnvironmentService environments = mock(EnvironmentService.class);
     private final TopologyConnectionRepository connections = mock(TopologyConnectionRepository.class);
     private final EnvironmentComparisonService service = new EnvironmentComparisonService(environments, connections);

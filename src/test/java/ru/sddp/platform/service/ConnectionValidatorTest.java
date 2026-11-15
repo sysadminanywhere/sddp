@@ -1,11 +1,11 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConnectionValidatorTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
     private final ConnectionValidator validator = new ConnectionValidator();
     @Test void acceptsDocumentedMapping() throws Exception {
         var settings = mapper.readTree("{\"host\":\"legacy\",\"port\":8080,\"target_endpoint\":\"/orders\"}");

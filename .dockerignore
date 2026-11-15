@@ -19,7 +19,6 @@ target/
 .gitignore
 
 # Maven
-.mvn/
 mvnw
 mvnw.cmd
 

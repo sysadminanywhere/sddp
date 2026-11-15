@@ -31,15 +31,15 @@ public class SnapshotExportService {
         var project = projects.require(id);
         List<ProjectEnvironment> projectEnvironments = environments.findByProjectIdOrderByPositionAscCodeAsc(id);
         String selected = environment == null || environment.isBlank() ? null : requireEnvironment(id, environment).getCode();
-        List<String> environmentCodes = selected == null
-            ? projectEnvironments.stream().map(ProjectEnvironment::getCode).toList()
-            : List.of(selected);
+        var snapshotEnvironments = projectEnvironments.stream()
+            .filter(e -> selected == null || selected.equals(e.getCode()))
+            .map(e -> new TopologySnapshot.Environment(e.getCode(), e.getName(), e.getPosition(), e.isProtected())).toList();
         var projectConnections = selected == null
             ? connections.findByProjectId(id)
             : connections.findByProjectIdAndEnvironment(id, selected);
-        return new TopologySnapshot(2, project.getName(), environmentCodes,
+        return new TopologySnapshot(1, project.getName(), snapshotEnvironments,
             nodes.findByProjectIdOrderByNameAsc(id).stream()
-                .map(n -> new TopologySnapshot.Service(n.getId(), n.getName(), n.getServiceType().name(), n.getDescription())).toList(),
+                .map(n -> new TopologySnapshot.Service(n.getId(), n.getName(), n.getServiceType().name(), n.getDescription(), n.getPositionX(), n.getPositionY())).toList(),
             apis.findByServiceProjectIdOrderByServiceNameAscNameAscVersionAsc(id).stream()
                 .map(a -> new TopologySnapshot.Api(a.getId(), a.getService().getId(), a.getName(), a.getVersion(),
                     a.getDescription(), a.getPattern().name(), a.getRequestSchema(), a.getResponseSchema())).toList(),

@@ -1,8 +1,9 @@
 package ru.sddp.platform.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
+import tools.jackson.databind.JsonNode;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
+import com.networknt.schema.SchemaLocation;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -11,7 +12,10 @@ public class ApiSchemaValidator {
         if (schema == null || !schema.isObject()) throw new IllegalArgumentException("API schema must be a JSON object");
         rejectRemoteReferences(schema);
         try {
-            JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7).getSchema(schema);
+            var registry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_7);
+            var errors = registry.getSchema(SchemaLocation.of(SpecificationVersion.DRAFT_7.getDialectId())).validate(schema);
+            if (!errors.isEmpty()) throw new IllegalArgumentException(errors.toString());
+            registry.getSchema(schema).initializeValidators();
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("Invalid JSON schema: " + e.getMessage(), e);
         }
@@ -19,7 +23,7 @@ public class ApiSchemaValidator {
 
     private void rejectRemoteReferences(JsonNode node) {
         if (node.isObject()) {
-            node.fields().forEachRemaining(entry -> {
+            node.properties().forEach(entry -> {
                 if (entry.getKey().equals("$ref") && (!entry.getValue().isTextual() || !entry.getValue().asText().startsWith("#"))) {
                     throw new IllegalArgumentException("Only local JSON Schema references are permitted");
                 }

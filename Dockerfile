@@ -2,15 +2,13 @@
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
-# Copy Maven files first for dependency caching
+# Copy Maven configuration and source
 COPY pom.xml .
-COPY src/main/resources/db/migration src/main/resources/db/migration
-RUN mvn -q dependency:go-offline -DskipTests
-
-# Copy source and build
+COPY .mvn .mvn
+ARG MAVEN_CENTRAL_URL=https://maven-central.storage-download.googleapis.com/maven2/
 COPY src src
 ARG VERSION=unknown
-RUN mvn -q package -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository mvn -B -Dmaven.central.url="$MAVEN_CENTRAL_URL" package -DskipTests
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
