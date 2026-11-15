@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Background, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState } from '@xyflow/react';
 import * as dagre from '@dagrejs/dagre';
@@ -8,54 +8,68 @@ import './graph.css';
 const dispatch = (name, detail) => window.dispatchEvent(new CustomEvent(name, { detail }));
 
 const NODE_WIDTH = 200;
-const NODE_HEIGHT = 60;
+const NODE_HEIGHT = 48;
+
+const toEdge = edge => ({
+  id: edge.id,
+  source: edge.source,
+  target: edge.target,
+  label: edge.label,
+  className: edge.kind ? `sddp-${edge.kind}` : '',
+  selected: Boolean(edge.selected),
+  markerEnd: { type: MarkerType.ArrowClosed },
+});
 
 function Graph() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [layoutDirection, setLayoutDirection] = useState('LR');
   const positions = useRef(new Map());
-  const pendingPositions = useRef(new Map());
+  const pending = useRef(new Map());
   const flushTimer = useRef(null);
-  const isAutoLayouting = useRef(false);
+  const flow = useRef(null);
 
+  const flushPositions = useCallback(() => {
+    if (!pending.current.size) return;
+    const updates = [...pending.current.entries()].map(([id, position]) => ({
+      id,
+      positionX: Math.round(position.x),
+      positionY: Math.round(position.y),
+    }));
+    pending.current.clear();
+    dispatch('sddp:graph-positions', updates);
+  }, []);
+
+  const queuePosition = useCallback((id, position) => {
+    pending.current.set(id, position);
+    if (flushTimer.current) clearTimeout(flushTimer.current);
+    flushTimer.current = setTimeout(flushPositions, 400);
+  }, [flushPositions]);
+
+  useEffect(() => () => clearTimeout(flushTimer.current), []);
+
+  // The host page owns the data; the bundle only renders it.
   useEffect(() => {
     const load = event => {
       const graph = event.detail || {};
-      setNodes(prev => {
-        prev.forEach(node => positions.current.set(node.id, node.position));
+      setNodes(current => {
+        current.forEach(node => positions.current.set(node.id, node.position));
         return (graph.nodes || []).map((node, index) => ({
           id: node.id,
-          position: positions.current.get(node.id) || node.position
-            || { x: 40 + (index % 3) * 280, y: 40 + Math.floor(index / 3) * 160 },
+          position: positions.current.get(node.id)
+            || node.position
+            || { x: 40 + (index % 3) * 280, y: 40 + Math.floor(index / 3) * 170 },
+          width: NODE_WIDTH,
+          height: NODE_HEIGHT,
           data: { label: node.label },
           className: node.kind === 'external' ? 'external-node' : 'core-node',
           sourcePosition: 'right',
           targetPosition: 'left',
         }));
       });
-      setEdges((graph.edges || []).map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        label: edge.label,
-        className: edge.kind ? `sddp-${edge.kind}` : '',
-        selected: Boolean(edge.selected),
-        markerEnd: { type: MarkerType.ArrowClosed },
-      })));
+      setEdges((graph.edges || []).map(toEdge));
+      setTimeout(() => flow.current?.fitView({ padding: 0.15, maxZoom: 1.25 }), 60);
     };
-    const reloadEdges = event => {
-      const list = event.detail || [];
-      setEdges(list.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        label: edge.label,
-        className: edge.kind ? `sddp-${edge.kind}` : '',
-        selected: Boolean(edge.selected),
-        markerEnd: { type: MarkerType.ArrowClosed },
-      })));
-    };
+    const reloadEdges = event => setEdges((event.detail || []).map(toEdge));
     window.addEventListener('sddp:graph-data', load);
     window.addEventListener('sddp:graph-edges', reloadEdges);
     return () => {
@@ -64,30 +78,10 @@ function Graph() {
     };
   }, [setNodes, setEdges]);
 
-  // Debounced position persistence
-  const flushPositions = useCallback(() => {
-    if (pendingPositions.current.size === 0) return;
-    const updates = [...pendingPositions.current.entries()].map(([id, pos]) => ({
-      id, positionX: Math.round(pos.x), positionY: Math.round(pos.y)
-    }));
-    pendingPositions.current.clear();
-    dispatch('sddp:graph-positions', updates);
-  }, []);
-
-  const scheduleFlush = useCallback(() => {
-    if (flushTimer.current) clearTimeout(flushTimer.current);
-    flushTimer.current = setTimeout(flushPositions, 800);
-  }, [flushPositions]);
-
-  const handleNodesChange = useCallback((changes, setNodesFn) => {
-    setNodesFn(changes);
-    changes.forEach(change => {
-      if (change.type === 'position' && change.position) {
-        pendingPositions.current.set(change.id, change.position);
-        scheduleFlush();
-      }
-    });
-  }, [scheduleFlush]);
+  // Persist the final position once the user releases the node.
+  const onNodeDragStop = useCallback((event, node) => {
+    if (node?.id && node.position) queuePosition(node.id, node.position);
+  }, [queuePosition]);
 
   const onConnect = useCallback(connection => {
     if (!connection?.source || !connection?.target) return;
@@ -102,87 +96,59 @@ function Graph() {
     dispatch('sddp:graph-edge-click', { id: null });
   }, []);
 
-  // Auto-layout using dagre
-  const runAutoLayout = useCallback(() => {
+  const runAutoLayout = useCallback(direction => {
     if (!nodes.length) return;
-    isAutoLayouting.current = true;
+    const graph = new dagre.graphlib.Graph({ compound: false });
+    graph.setGraph({ rankdir: direction || 'LR', nodesep: 70, ranksep: 130, edgesep: 20, marginx: 40, marginy: 40 });
+    graph.setDefaultEdgeLabel(() => ({}));
+    nodes.forEach(node => graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
+    edges.forEach(edge => graph.setEdge(edge.source, edge.target));
+    dagre.layout(graph);
 
-    const g = new dagre.graphlib.Graph({ compound: false });
-    g.setGraph({ rankdir: layoutDirection, nodesep: 80, ranksep: 120, edgesep: 20 });
-    g.setDefaultEdgeLabel(() => ({}));
-
-    nodes.forEach(node => {
-      g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    const next = nodes.map(node => {
+      const point = graph.node(node.id);
+      if (!point) return node;
+      const position = { x: Math.round(point.x - NODE_WIDTH / 2), y: Math.round(point.y - NODE_HEIGHT / 2) };
+      pending.current.set(node.id, position);
+      return { ...node, position };
     });
-    edges.forEach(edge => {
-      g.setEdge(edge.source, edge.target);
-    });
+    setNodes(next);
+    flushPositions();
+    setTimeout(() => flow.current?.fitView({ padding: 0.15, maxZoom: 1.25 }), 60);
+  }, [nodes, edges, setNodes, flushPositions]);
 
-    dagre.layout(g);
-
-    setNodes(ns => ns.map(node => {
-      const dagreNode = g.node(node.id);
-      if (!dagreNode) return node;
-      const pos = { x: dagreNode.x - NODE_WIDTH / 2, y: dagreNode.y - NODE_HEIGHT / 2 };
-      pendingPositions.current.set(node.id, pos);
-      return { ...node, position: pos };
-    }));
-
-    scheduleFlush();
-    isAutoLayouting.current = false;
-  }, [nodes, edges, layoutDirection, scheduleFlush]);
-
-  const handleDirectionChange = useCallback((dir) => {
-    setLayoutDirection(dir);
-    runAutoLayout();
+  useEffect(() => {
+    const autoLayout = event => runAutoLayout(event.detail?.direction);
+    const fitView = () => flow.current?.fitView({ padding: 0.15, maxZoom: 1.25 });
+    window.addEventListener('sddp:graph-auto-layout', autoLayout);
+    window.addEventListener('sddp:graph-fit-view', fitView);
+    return () => {
+      window.removeEventListener('sddp:graph-auto-layout', autoLayout);
+      window.removeEventListener('sddp:graph-fit-view', fitView);
+    };
   }, [runAutoLayout]);
-
-  const handleLayoutClick = useCallback(() => {
-    runAutoLayout();
-  }, [runAutoLayout]);
-
-  const handleFitView = useCallback((rf) => {
-    if (rf) rf.fitView({ padding: 0.1, duration: 300 });
-  }, []);
 
   return (
     <ReactFlow
       nodes={nodes}
       edges={edges}
-      onNodesChange={handleNodesChange}
+      onNodesChange={onNodesChange}
+      onNodeDragStop={onNodeDragStop}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
       onEdgeClick={onEdgeClick}
       onPaneClick={onPaneClick}
-      fitView
+      onInit={instance => { flow.current = instance; }}
       aria-label="Topology editor"
-      nodeOrigin={[0.5, 0.5]}
     >
       <Background />
       <Controls />
       <MiniMap
-        nodeColor={node => node.data?.kind === 'external' ? '#f472b6' : '#60a5fa'}
+        nodeColor={node => String(node.className || '').includes('external') ? '#f472b6' : '#60a5fa'}
         maskColor="rgba(11, 18, 32, 0.6)"
       />
-      <div className="graph-toolbar">
-        <select value={layoutDirection} onChange={e => handleDirectionChange(e.target.value)} aria-label="Layout direction">
-          <option value="LR">Left → Right</option>
-          <option value="RL">Right → Left</option>
-          <option value="TB">Top → Bottom</option>
-          <option value="BT">Bottom → Top</option>
-        </select>
-        <button onClick={handleLayoutClick} title="Auto-layout" aria-label="Auto-layout">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        </button>
-        <button onClick={() => handleFitView(window.__rfInstance)} title="Fit view" aria-label="Fit view">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        </button>
-      </div>
     </ReactFlow>
   );
 }
 
-// Capture ReactFlow instance for fitView
-const originalCreateRoot = createRoot;
-const root = originalCreateRoot(document.getElementById('graph'));
-root.render(<Graph />);
+createRoot(document.getElementById('graph')).render(<Graph />);
