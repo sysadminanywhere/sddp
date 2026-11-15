@@ -31,6 +31,9 @@ public class ProjectController {
     @GetMapping("/{projectId}")
     public ApiModels.ProjectResponse get(@PathVariable UUID projectId) { return projects.get(projectId); }
 
+    @DeleteMapping("/{projectId}") @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID projectId) { projects.delete(projectId); }
+
     @GetMapping("/{projectId}/apis")
     public List<ApiModels.ServiceApiResponse> apis(@PathVariable UUID projectId) { return catalog.listProjectApis(projectId); }
 

@@ -26,16 +26,17 @@ mvn spring-boot:run
 - `GET /api/v1/projects` — список проектов для выбора активной системы
 - `POST /api/v1/projects` — создать проект (`{"name":"billing"}`)
 - `GET /api/v1/projects/{id}` — карточка проекта
+- `DELETE /api/v1/projects/{id}` — удалить проект вместе со всеми сервисами, API, средами и связями (каскадное удаление)
 - `POST /api/v1/projects/import` — импортировать Topology Snapshot (v2 или legacy v1)
 - `GET/POST /api/v1/projects/{id}/services` — список и создание сервисов
-- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}` — карточка, настройки и удаление сервиса (удаление блокируется, если сервис используется в связях; вместе с ним удаляются его API-операции)
+- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}` — карточка, настройки и удаление сервиса (удаление блокируется с HTTP 409, если сервис используется в связях; вместе с ним удаляются его API-операции)
 - `GET /api/v1/projects/{id}/connections/{connectionId}` — карточка одной связи (редактор связи)
 - `GET/POST /api/v1/projects/{id}/services/{serviceId}/apis` — список и создание API-операций сервиса
-- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}` — карточка, редактирование и удаление API-операции
+- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}` — карточка, редактирование и удаление API-операции (удаление блокируется с HTTP 409, если операция используется в связях)
 - `POST /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}/versions` — создать совместимую новую версию API; существующие связи остаются на прежней версии
 - `GET /api/v1/projects/{id}/apis` — все API проекта (для редактора связей)
 - `GET/POST /api/v1/projects/{id}/environments` — список и создание сред проекта
-- `PUT/DELETE /api/v1/projects/{id}/environments/{environmentId}` — переименование/защита и удаление среды
+- `PUT/DELETE /api/v1/projects/{id}/environments/{environmentId}` — переименование/защита и удаление среды (удаление блокируется с HTTP 409, если в среде есть связи)
 - `GET /api/v1/projects/{id}/environments/compare?sourceEnvironment=DEV&targetEnvironment=STAGE` — сравнить связи и настройки двух сред
 - `POST /api/v1/projects/{id}/connections/copy` — скопировать связи между средами (`MERGE` — добавить недостающие, `REPLACE` — заменить целевой набор)
 - `POST /api/v1/projects/{id}/connections` — создать связь между API-операциями
@@ -54,7 +55,7 @@ mvn spring-boot:run
 
 Выбранный проект и среда хранятся в `localStorage` и синхронизируются с query-параметрами (`?projectId=…&environment=…`), поэтому ссылку на конкретный экран можно передать коллеге.
 
-- `/` (`index.html`) — проекты: создание, импорт snapshot, выбор активного проекта
+- `/` (`index.html`) — проекты: создание, импорт snapshot, выбор активного проекта и удаление проекта
 - `/project.html?projectId=…` — рабочее пространство проекта с вкладками «Обзор», «Сервисы», «Связи», «Среды», «Сборка»; IR, кодогенерация и snapshot находятся на вкладке «Сборка»
 - `/service.html?projectId=…&serviceId=…` — страница сервиса: настройки, список API-операций и входящие/исходящие связи
 - `/api.html?projectId=…&serviceId=…` — отдельная форма создания API-операции

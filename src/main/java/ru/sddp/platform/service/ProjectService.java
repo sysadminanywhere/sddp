@@ -33,6 +33,11 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public ApiModels.ProjectResponse get(UUID id) { return response(require(id)); }
 
+    @Transactional
+    public void delete(UUID id) {
+        projects.delete(require(id));
+    }
+
     @Transactional(readOnly = true)
     public Project require(UUID id) { return projects.findById(id).orElseThrow(() -> new ResourceNotFoundException("Project not found: " + id)); }
 

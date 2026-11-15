@@ -13,6 +13,10 @@ public class ApiExceptionHandler {
     ResponseEntity<Problem> badRequest(Exception ex) { return ResponseEntity.badRequest().body(new Problem(400, ex.getMessage())); }
     @ExceptionHandler(ru.sddp.platform.service.CompatibilityViolationException.class)
     ResponseEntity<Problem> incompatible(ru.sddp.platform.service.CompatibilityViolationException ex) { return ResponseEntity.badRequest().body(new Problem(400, ex.getMessage())); }
+    @ExceptionHandler(ru.sddp.platform.service.ResourceInUseException.class)
+    ResponseEntity<Problem> resourceInUse(ru.sddp.platform.service.ResourceInUseException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new Problem(409, ex.getMessage()));
+    }
     @ExceptionHandler(ru.sddp.platform.service.ProtectedEnvironmentException.class)
     ResponseEntity<Problem> protectedEnvironment(ru.sddp.platform.service.ProtectedEnvironmentException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new Problem(409, ex.getMessage()));
