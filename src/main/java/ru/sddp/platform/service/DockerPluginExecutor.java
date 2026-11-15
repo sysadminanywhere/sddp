@@ -106,6 +106,10 @@ public class DockerPluginExecutor implements PluginExecutor {
     }
 
     static Map<String, String> extract(InputStream archive) throws Exception {
+        return extract(archive, true);
+    }
+
+    static Map<String, String> extract(InputStream archive, boolean stripOutputPrefix) throws Exception {
         Map<String, String> files = new TreeMap<>(); long total = 0; int entries = 0;
         try (var tar = new TarArchiveInputStream(archive)) {
             org.apache.commons.compress.archivers.tar.TarArchiveEntry entry;
@@ -113,7 +117,7 @@ public class DockerPluginExecutor implements PluginExecutor {
                 if (++entries > MAX_ENTRIES) throw new IllegalArgumentException("Too many plugin output entries");
                 String path = entry.getName().replaceFirst("^\\./", "");
                 if (path.equals(".") || path.isEmpty()) continue;
-                if (path.startsWith("output/")) path = path.substring("output/".length());
+                if (stripOutputPrefix && path.startsWith("output/")) path = path.substring("output/".length());
                 if (path.isEmpty()) continue;
                 if (path.length() > 512 || path.startsWith("/") || path.contains("\\") || Arrays.asList(path.split("/")).contains("..")) throw new IllegalArgumentException("Unsafe plugin output path");
                 if (entry.isSymbolicLink() || entry.isLink()) throw new IllegalArgumentException("Unsafe plugin output link");

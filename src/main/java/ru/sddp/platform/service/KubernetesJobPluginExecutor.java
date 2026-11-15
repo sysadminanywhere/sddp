@@ -5,6 +5,7 @@ import io.kubernetes.client.openapi.apis.BatchV1Api;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.*;
 import io.kubernetes.client.util.ClientBuilder;
+import io.kubernetes.client.custom.Quantity;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import ru.sddp.platform.api.ApiModels;
@@ -14,7 +15,6 @@ import java.time.Instant;
 import java.util.*;
 import java.util.zip.GZIPInputStream;
 import java.io.ByteArrayInputStream;
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 
 /** Runs a registered plugin with a read-only ConfigMap input and extracts its output archive from pod logs. */
 @Component
@@ -22,6 +22,9 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 public class KubernetesJobPluginExecutor implements PluginExecutor {
     private static final String BEGIN = "SDDP_OUTPUT_BEGIN";
     private static final String END = "SDDP_OUTPUT_END";
+    private static final int MAX_COMPRESSED = 5_000_000;
+    private static final int MAX_ENCODED = ((MAX_COMPRESSED + 2) / 3) * 4;
+    private static final int MAX_LOG = 7_000_000;
     private final ObjectMapper mapper;
     private final String namespace;
     private final long pollMillis;
@@ -48,10 +51,12 @@ public class KubernetesJobPluginExecutor implements PluginExecutor {
             core.createNamespacedConfigMap(namespace, new V1ConfigMap().metadata(new V1ObjectMeta().name(name)).data(Map.of("ir.json", ir))).execute();
             configCreated = true;
             var input = new V1Volume().name("input").configMap(new V1ConfigMapVolumeSource().name(name));
-            var output = new V1Volume().name("output").emptyDir(new V1EmptyDirVolumeSource());
+            var output = new V1Volume().name("output").emptyDir(new V1EmptyDirVolumeSource().sizeLimit(Quantity.fromString("16Mi")));
             var mounts = List.of(new V1VolumeMount().name("input").mountPath("/input").readOnly(true), new V1VolumeMount().name("output").mountPath("/output"));
             String command = "plugin /input/ir.json /output || exit $?; echo " + BEGIN + "; tar -czf - -C /output . | base64 | tr -d '\\n'; echo; echo " + END;
             var container = new V1Container().name("plugin").image(plugin.executableTarget()).imagePullPolicy("IfNotPresent").command(List.of("/bin/sh", "-c", command)).volumeMounts(mounts)
+                .resources(new V1ResourceRequirements().requests(Map.of("cpu", Quantity.fromString("100m"), "memory", Quantity.fromString("128Mi"), "ephemeral-storage", Quantity.fromString("16Mi")))
+                    .limits(Map.of("cpu", Quantity.fromString("1"), "memory", Quantity.fromString("512Mi"), "ephemeral-storage", Quantity.fromString("32Mi"))))
                 .securityContext(new V1SecurityContext().allowPrivilegeEscalation(false).readOnlyRootFilesystem(true).capabilities(new V1Capabilities().drop(List.of("ALL"))));
             var pod = new V1PodSpec().restartPolicy("Never").automountServiceAccountToken(false).containers(List.of(container)).volumes(List.of(input, output));
             var job = new V1Job().metadata(new V1ObjectMeta().name(name)).spec(new V1JobSpec().backoffLimit(0).activeDeadlineSeconds(300L).template(new V1PodTemplateSpec().spec(pod)));
@@ -78,23 +83,15 @@ public class KubernetesJobPluginExecutor implements PluginExecutor {
     private String podLogs(CoreV1Api core, String name) throws Exception {
         var pods = core.listNamespacedPod(namespace).labelSelector("job-name=" + name).execute().getItems();
         if (pods.isEmpty()) throw new IllegalStateException("Job pod not found");
-        return core.readNamespacedPodLog(pods.getFirst().getMetadata().getName(), namespace).container("plugin").execute();
+        return core.readNamespacedPodLog(pods.getFirst().getMetadata().getName(), namespace).container("plugin").limitBytes(MAX_LOG).execute();
     }
     static Map<String,String> extract(String logs) throws Exception {
         int start = logs.lastIndexOf(BEGIN), end = logs.indexOf(END, start < 0 ? 0 : start);
         if (start < 0 || end < 0) throw new IllegalArgumentException("Plugin output archive is missing");
-        byte[] compressed = Base64.getMimeDecoder().decode(logs.substring(start + BEGIN.length(), end));
-        if (compressed.length > 5_000_000) throw new IllegalArgumentException("Plugin output archive too large");
-        Map<String,String> files = new TreeMap<>(); long total = 0;
-        try (var tar = new TarArchiveInputStream(new GZIPInputStream(new ByteArrayInputStream(compressed)))) {
-            org.apache.commons.compress.archivers.tar.TarArchiveEntry entry;
-            while ((entry = tar.getNextTarEntry()) != null) {
-                if (entry.isDirectory()) continue;
-                String path = entry.getName().replaceFirst("^\\./", "");
-                if (!entry.isFile() || path.startsWith("/") || Arrays.asList(path.split("/")).contains("..") || entry.getSize() > 5_000_000 || (total += entry.getSize()) > 10_000_000) throw new IllegalArgumentException("Unsafe or oversized plugin output");
-                files.put(path, new String(tar.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
-            }
-        }
-        return files;
+        String encoded = logs.substring(start + BEGIN.length(), end).trim();
+        if (encoded.length() > MAX_ENCODED) throw new IllegalArgumentException("Plugin output archive too large");
+        byte[] compressed = Base64.getDecoder().decode(encoded);
+        if (compressed.length > MAX_COMPRESSED) throw new IllegalArgumentException("Plugin output archive too large");
+        return DockerPluginExecutor.extract(new GZIPInputStream(new ByteArrayInputStream(compressed)), false);
     }
 }

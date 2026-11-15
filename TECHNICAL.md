@@ -329,6 +329,8 @@ Thrown when executor fails:
 - Requires: `SDDP_K8S_NAMESPACE` (default `default`), `SDDP_K8S_POLL_SECONDS` (default 2)
 - Creates: ConfigMap (IR), Job (plugin pod)
 - Pod: `restartPolicy: Never`, `readOnlyRootFilesystem`, `dropAllCapabilities`, no service account token
+- Job limits: 1 CPU, 512 MiB RAM, 32 MiB ephemeral storage, 16 MiB output volume and 5 minute execution deadline; node-level PID limits remain a cluster responsibility
+- Output: pod log reads are limited to 7 MB, compressed archive to 5 MB, and extracted files to 500 entries, 5 MB per file and 10 MB total; links and unsafe paths are rejected
 - Polls Job status → on success extracts output archive from logs
 - Cleans up Job + ConfigMap on completion/failure
 

@@ -144,6 +144,8 @@ The pod runs as UID 1000 with a read-only root filesystem, no Linux capabilities
 
 Plugin images are started with `imagePullPolicy: IfNotPresent` and no `imagePullSecrets` of their own, so either pre-pull them on the nodes or attach a pull secret to the namespace's `default` service account. The executor polls Job status every `SDDP_K8S_POLL_SECONDS` (default `2`, minimum `0.5`); raise it if many builds run concurrently and the API server rate-limits the application. The application keeps no local state, so additional replicas can be added behind the Service; only the database needs to be shared.
 
+Each plugin Job has limits of 1 CPU, 512 MiB memory and 32 MiB ephemeral storage, with a 16 MiB output volume and a five-minute execution deadline. The cluster administrator must configure pod PID limits at the node level. Large plugin logs can prevent the output archive from being recovered because log reads are capped at 7 MB.
+
 ---
 
 ## Architecture
