@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="service.title">Service · SDDP</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body data-page="service">
+  <div id="app-shell"></div>
+  <main class="page">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/index.html" data-i18n="nav.projects">Projects</a>
+      <span class="breadcrumb-sep">/</span>
+      <a id="breadcrumbProject" href="/project.html" data-i18n="service.breadcrumbProject">Project</a>
+      <span class="breadcrumb-sep">/</span>
+      <span id="breadcrumbService" data-i18n="service.breadcrumbService">Service</span>
+    </nav>
+
+    <div class="page-head">
+      <div>
+        <h1 id="serviceTitle" data-i18n="service.heading">Service</h1>
+        <p id="serviceSubtitle" data-i18n="service.loading">Loading…</p>
+      </div>
+      <div class="page-actions">
+        <button id="reloadService" class="secondary" type="button" data-i18n="service.refresh">Refresh</button>
+      </div>
+    </div>
+
+    <div class="layout layout-sidebar-left">
+      <aside class="side-stack">
+        <section class="card">
+          <div class="card-head"><h2 data-i18n="service.settings">Service settings</h2><span id="serviceTypeBadge" class="badge">CORE</span></div>
+          <form id="serviceForm" class="form">
+            <label>
+              <span data-i18n="service.name">Service name</span>
+              <input id="serviceName" autocomplete="off" required>
+            </label>
+            <label>
+              <span data-i18n="service.type">Service type</span>
+              <select id="serviceType">
+                <option value="CORE" data-i18n="project.serviceType.core">CORE — internal service</option>
+                <option value="EXTERNAL" data-i18n="project.serviceType.external">EXTERNAL — external system</option>
+                <option value="ADAPTER" data-i18n="project.serviceType.adapter">ADAPTER — integration adapter</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="service.description">Description</span>
+              <textarea id="serviceDescription" data-i18n-placeholder="service.descriptionPlaceholder"></textarea>
+            </label>
+            <div class="button-row"><button type="submit" data-i18n="service.save">Save service</button></div>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h2 data-i18n="service.connections">Service connections</h2></div>
+          <h3 data-i18n="service.outbound">Outbound</h3>
+          <div id="outboundList" class="list section-gap"></div>
+          <h3 class="section-gap" data-i18n="service.inbound">Inbound</h3>
+          <div id="inboundList" class="list section-gap"></div>
+        </section>
+      </aside>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="service.apiHeading">API operations</h2>
+          <div class="button-row">
+            <span id="apiCount" class="badge">0</span>
+            <a id="newApi" class="button-link" href="#" data-i18n="service.addApi">Add API</a>
+          </div>
+        </div>
+        <p class="hint" data-i18n="service.apiHint">An API belongs to a service. Open an operation to view schemas, edit it, release a new version, or delete it.</p>
+        <div id="apiList" class="api-grid section-gap"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/i18n.js"></script>
+  <script src="/common.js"></script>
+  <script src="/service.js"></script>
+</body>
+</html>

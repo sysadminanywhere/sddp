@@ -1,96 +1,103 @@
 # SDDP Core Backend
 
-Первая рабочая вертикаль платформы Spec-Driven Development Platform по `sddp_implementation_plan.md`.
+## Quick Start
 
-## Запуск
-
-Требуются Java 21, Maven и Docker. База запускается командой:
+Requires Java 21, Maven, and Docker. Start the database:
 
 ```text
 docker compose up -d postgres
 mvn spring-boot:run
 ```
 
-По умолчанию приложение подключается к `jdbc:postgresql://localhost:5432/sddp`. Параметры можно переопределить через `SddP_DB_URL`, `SddP_DB_USERNAME` и `SddP_DB_PASSWORD`.
+By default the app connects to `jdbc:postgresql://localhost:5432/sddp`. Override via `SddP_DB_URL`, `SddP_DB_USERNAME`, `SddP_DB_PASSWORD`.
 
-## Модель данных
+## Data Model
 
-- **Проект** — рабочее пространство интеграции.
-- **Среда** — профиль проекта (`DEV`, `STAGE`, `PROD` по умолчанию): собственный набор связей и настроек подключения. Среды хранятся в БД, у каждой есть код, название, порядок и признак защиты.
-- **Сервис** — узел проекта с типом `CORE`, `EXTERNAL` или `ADAPTER`.
-- **API-операция** — принадлежит сервису: имя, версия, pattern (`REQUEST_RESPONSE` / `PUB_SUB`), request/response JSON Schema.
-- **Связь** — направление между двумя сервисами и конкретными API-операциями в одной среде. Одна связь описывает одну операцию целевого API; несколько операций оформляются несколькими связями.
+- **Project** — integration workspace.
+- **Environment** — project profile (`DEV`, `STAGE`, `PROD` by default): its own set of connections and connection settings. Environments are stored in DB with code, name, order, and a protected flag.
+- **Service** — project node of type `CORE`, `EXTERNAL`, or `ADAPTER`.
+- **API Operation** — belongs to a service: name, version, pattern (`REQUEST_RESPONSE` / `PUB_SUB`), request/response JSON Schema.
+- **Connection** — directed link between two services and specific API operations within one environment. One connection describes one target API operation; multiple operations require multiple connections.
 
-## Реализованный API
+## Implemented API
 
-- `GET /api/v1/projects` — список проектов для выбора активной системы
-- `POST /api/v1/projects` — создать проект (`{"name":"billing"}`)
-- `GET /api/v1/projects/{id}` — карточка проекта
-- `DELETE /api/v1/projects/{id}` — удалить проект вместе со всеми сервисами, API, средами и связями (каскадное удаление)
-- `POST /api/v1/projects/import` — импортировать Topology Snapshot (v2 или legacy v1)
-- `GET/POST /api/v1/projects/{id}/services` — список и создание сервисов
-- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}` — карточка, настройки и удаление сервиса (удаление блокируется с HTTP 409, если сервис используется в связях; вместе с ним удаляются его API-операции)
-- `GET /api/v1/projects/{id}/connections/{connectionId}` — карточка одной связи (редактор связи)
-- `GET/POST /api/v1/projects/{id}/services/{serviceId}/apis` — список и создание API-операций сервиса
-- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}` — карточка, редактирование и удаление API-операции (удаление блокируется с HTTP 409, если операция используется в связях)
-- `POST /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}/versions` — создать совместимую новую версию API; существующие связи остаются на прежней версии
-- `GET /api/v1/projects/{id}/apis` — все API проекта (для редактора связей)
-- `GET/POST /api/v1/projects/{id}/environments` — список и создание сред проекта
-- `PUT/DELETE /api/v1/projects/{id}/environments/{environmentId}` — переименование/защита и удаление среды (удаление блокируется с HTTP 409, если в среде есть связи)
-- `GET /api/v1/projects/{id}/environments/compare?sourceEnvironment=DEV&targetEnvironment=STAGE` — сравнить связи и настройки двух сред
-- `POST /api/v1/projects/{id}/connections/copy` — скопировать связи между средами (`MERGE` — добавить недостающие, `REPLACE` — заменить целевой набор)
-- `POST /api/v1/projects/{id}/connections` — создать связь между API-операциями
-- `PUT /api/v1/projects/{id}/connections/{connectionId}` — изменить связь, транспорт, настройки и маппинг
-- `PUT /api/v1/projects/{id}/connections/{connectionId}/mapping` — обновить только правила маппинга
-- `DELETE /api/v1/projects/{id}/connections/{connectionId}` — удалить связь
-- `POST /api/v1/topology/connections` — тот же контракт в формате `{projectId, connection}`
-- `GET /api/v1/projects/{id}/topology?environment=DEV` — получить сервисы и связи среды для UI
-- `POST /api/v1/projects/{id}/ir?environment=DEV` — собрать и проверить IR-манифест
-- `POST /api/v1/projects/{id}/snapshot?environment=DEV` — скачать JSON Topology Snapshot v2 (без параметра — все среды)
-- `POST /api/v1/codegen/generate` — сгенерировать Java proxy через FreeMarker; поле `plugin` опционально запускает Docker/Kubernetes executor
-- `GET /api/v1/codegen/plugins` — активные плагины генерации для UI
+- `GET /api/v1/projects` — list projects for active system selection
+- `POST /api/v1/projects` — create project (`{"name":"billing"}`)
+- `GET /api/v1/projects/{id}` — project card
+- `DELETE /api/v1/projects/{id}` — delete project with all services, APIs, environments, and connections (cascade)
+- `POST /api/v1/projects/import` — import Topology Snapshot (v2 or legacy v1)
+- `GET/POST /api/v1/projects/{id}/services` — list and create services
+- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}` — service card, settings, and delete (HTTP 409 if used in connections; cascades API deletions)
+- `GET /api/v1/projects/{id}/connections/{connectionId}` — single connection card (editor)
+- `GET/POST /api/v1/projects/{id}/services/{serviceId}/apis` — list and create service API operations
+- `GET/PUT/DELETE /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}` — API operation card, edit, and delete (HTTP 409 if used in connections)
+- `POST /api/v1/projects/{id}/services/{serviceId}/apis/{apiId}/versions` — create backward-compatible new API version; existing connections stay on the previous version
+- `GET /api/v1/projects/{id}/apis` — all project APIs (for connection editor)
+- `GET/POST /api/v1/projects/{id}/environments` — list and create project environments
+- `PUT/DELETE /api/v1/projects/{id}/environments/{environmentId}` — rename/protect and delete environment (HTTP 409 if connections exist)
+- `GET /api/v1/projects/{id}/environments/compare?sourceEnvironment=DEV&targetEnvironment=STAGE` — compare connections and settings of two environments
+- `POST /api/v1/projects/{id}/connections/copy` — copy connections between environments (`MERGE` — add missing, `REPLACE` — replace target set)
+- `POST /api/v1/projects/{id}/connections` — create connection between API operations
+- `PUT /api/v1/projects/{id}/connections/{connectionId}` — update connection, transport, settings, and mapping
+- `PUT /api/v1/projects/{id}/connections/{connectionId}/mapping` — update only mapping rules
+- `DELETE /api/v1/projects/{id}/connections/{connectionId}` — delete connection
+- `POST /api/v1/topology/connections` — same contract in `{projectId, connection}` format
+- `GET /api/v1/projects/{id}/topology?environment=DEV` — get services and connections of environment for UI
+- `POST /api/v1/projects/{id}/ir?environment=DEV` — build and validate IR manifest
+- `POST /api/v1/projects/{id}/snapshot?environment=DEV` — download JSON Topology Snapshot v2 (all environments without parameter)
+- `POST /api/v1/codegen/generate` — generate Java proxy via FreeMarker; optional `plugin` field runs Docker/Kubernetes executor
+- `GET /api/v1/codegen/plugins` — active generation plugins for UI
 - `/actuator/health` — health check
 
-## Интерфейс
+## UI
 
-Выбранный проект и среда хранятся в `localStorage` и синхронизируются с query-параметрами (`?projectId=…&environment=…`), поэтому ссылку на конкретный экран можно передать коллеге.
+Selected project and environment are stored in `localStorage` and synced with query params (`?projectId=…&environment=…`), so a direct link to any screen can be shared.
 
-- `/` (`index.html`) — проекты: создание, импорт snapshot, выбор активного проекта и удаление проекта
-- `/project.html?projectId=…` — рабочее пространство проекта с вкладками «Обзор», «Сервисы», «Связи», «Среды», «Сборка»; IR, кодогенерация и snapshot находятся на вкладке «Сборка»
-- `/service.html?projectId=…&serviceId=…` — страница сервиса: настройки, список API-операций и входящие/исходящие связи
-- `/api.html?projectId=…&serviceId=…` — отдельная форма создания API-операции
-- `/api.html?projectId=…&serviceId=…&apiId=…&mode=view|edit|version|delete` — просмотр, редактирование, новая версия и удаление API-операции
-- `/service-form.html?projectId=…&mode=create` и `/service-form.html?projectId=…&serviceId=…&mode=edit|delete` — отдельные формы создания, редактирования и удаления сервиса
-- `/connection.html?projectId=…&mode=create` и `/connection.html?projectId=…&connectionId=…&mode=edit|delete` — отдельные формы создания, редактирования и удаления связи
-- `/environment.html?projectId=…&mode=create` и `/environment.html?projectId=…&environmentId=…&mode=edit|delete` — отдельные формы создания, редактирования и удаления среды
-- `/graph.html?projectId=…` — графический редактор связей текущей среды: связи рисуются перетаскиванием от сервиса к сервису, проблемные связи подсвечиваются, а позиции узлов сохраняются в проекте
+- `/` (`index.html`) — projects: create, import snapshot, select active project, and delete project
+- `/project.html?projectId=…` — project workspace with tabs "Overview", "Services", "Connections", "Environments", "Build"; IR, codegen, and snapshot live on the "Build" tab
+- `/service.html?projectId=…&serviceId=…` — service page: settings, API operation list, inbound/outbound connections
+- `/api.html?projectId=…&serviceId=…` — API operation create form
+- `/api.html?projectId=…&serviceId=…&apiId=…&mode=view|edit|version|delete` — view, edit, new version, and delete API operation
+- `/service-form.html?projectId=…&mode=create` and `/service-form.html?projectId=…&serviceId=…&mode=edit|delete` — separate forms for create, edit, and delete service
+- `/connection.html?projectId=…&mode=create` and `/connection.html?projectId=…&connectionId=…&mode=edit|delete` — separate forms for create, edit, and delete connection
+- `/environment.html?projectId=…&mode=create` and `/environment.html?projectId=…&environmentId=…&mode=edit|delete` — separate forms for create, edit, and delete environment
+- `/graph.html?projectId=…` — graphical connection editor for current environment: drag from source service handle to target service to create a connection; problematic connections are highlighted; node positions are persisted in the project
 
-API-схемы редактируются как дерево полей (имя, тип, обязательность, описание, вложенные объекты и массивы). JSON Schema генерируется автоматически и показывается только для чтения. Маппинг связи настраивается выбором полей из request-схем исходной и целевой API-операций; JSON-манифест также доступен только как предпросмотр. Все CRUD-операции открываются на отдельных страницах-формах: на списках проекта и сервиса остаются только ссылки, а создание, редактирование и удаление сервисов, связей и сред выполняются на страницах `service-form.html`, `connection.html` и `environment.html`.
+API schemas are edited as a field tree (name, type, required, description, nested objects and arrays). JSON Schema is generated automatically and shown read-only. Connection mapping is configured by picking fields from source and target request schemas; JSON manifest is also preview-only. All CRUD operations open on dedicated form pages: project and service lists keep only links; create/edit/delete of services, connections, and environments happen on `service-form.html`, `connection.html`, and `environment.html`.
 
-В интерфейсе показывается только последняя версия каждой API-операции: старые версии остаются в базе для уже существующих связей, но не засоряют список API и выпадающие списки выбора. Удаление API-операции, которая используется в связях, блокируется — сначала нужно изменить или удалить эти связи.
+Only the latest version of each API operation is shown in the UI; older versions remain in DB for existing connections but don't clutter lists and dropdowns. Deleting an API operation used in connections is blocked — change or delete those connections first.
 
-Среды создаются, редактируются и удаляются на отдельных страницах `environment.html` (со вкладки «Среды» и со страницы проекта): код, название, порядок и признак «защищённая». Защищённая среда (по умолчанию `PROD`) требует подтверждения для создания, изменения и удаления связей, копирования в неё и собственного удаления; подтверждение ставится чекбоксом в форме и передаётся заголовком `X-SDDP-Confirm-Protected: true`. На вкладке также доступны сравнение двух сред (различия `CHANGED`, `MISSING_IN_TARGET`, `MISSING_IN_SOURCE`) и копирование связей в режимах `MERGE` и `REPLACE`. Счётчики связей на обзоре считаются по текущей среде, а snapshot можно выгрузить как по всем средам, так и по одной.
+Environments are created, edited, and deleted on dedicated `environment.html` pages (from "Environments" tab and project page): code, name, order, and "protected" flag. A protected environment (default `PROD`) requires confirmation for creating, editing, and deleting connections, copying into it, and its own deletion; confirmation is a checkbox in the form sent via `X-SDDP-Confirm-Protected: true` header. The tab also provides environment comparison (differences `CHANGED`, `MISSING_IN_TARGET`, `MISSING_IN_SOURCE`) and connection copy in `MERGE` and `REPLACE` modes. Connection counters on overview are scoped to the current environment; snapshot can be exported for all environments or a single one.
 
-Графический редактор `/graph.html` показывает сервисы проекта узлами, а связи текущей среды — рёбрами. Чтобы создать связь, протяните кружок справа от сервиса-источника на сервис-цель: откроется диалог выбора API-операций, транспорта и endpoint'а, а направление берётся из жеста. Цвет ребра отражает проверку схем: зелёный — проблем нет, жёлтый — предупреждения (например, маппинг полей не настроен), красный пунктир — ошибки (например, в маппинге не хватает обязательных полей целевой request-схемы или он ссылается на несуществующие поля). Список проблем справа кликабелен: выбор проблемы выделяет связь и показывает её детали со ссылками на формы редактирования и удаления. Кнопки «Авто-раскладка» (dagre, четыре направления) и «Вписать» упорядочивают граф, а перетаскивание узлов сохраняет их координаты в сервисе (`position_x`/`position_y`) через `PUT /services/{serviceId}`.
+The graphical editor `/graph.html` shows project services as nodes and current environment connections as edges. To create a connection, drag the handle on the right side of a source service onto a target service: a dialog opens for API operation, transport, and endpoint selection; direction is inferred from the gesture. Edge color reflects schema validation: green — no issues, yellow — warnings (e.g., no field mapping configured), red dashed — errors (e.g., mapping misses required target request fields or references non-existent fields). Issue list on the right is clickable: selecting an issue highlights the edge and shows its details with edit/delete form links. "Auto-layout" (dagre, four directions) and "Fit view" buttons arrange the graph; dragging nodes persists coordinates to the service (`position_x`/`position_y`) via `PUT /services/{serviceId}`.
 
-Общие стили и клиент API находятся в `static/app.css` и `static/common.js`, редактор схем — в `static/schema-editor.js`.
+Shared styles and client API live in `static/app.css` and `static/common.js`; schema editor — in `static/schema-editor.js`.
 
-Миграции находятся в `src/main/resources/db/migration`. Схема хранит метаданные проектов, сервисов, API-описаний и связей; поля ПДн и пользовательские токены не предусмотрены.
+Migrations are in `src/main/resources/db/migration`. Schema stores project, service, API, and connection metadata; no PII or user token fields.
 
-## Проверка
+## Verification
 
 ```text
 mvn test
 ```
 
-Редактор графа использует локально собранные ресурсы React Flow и `dagre` для авто-раскладки. После изменения файлов в `frontend/` обновите их командами `npm ci` и `npm run build` из каталога `frontend`, затем соберите backend. В runtime загрузка пакетов из интернета не требуется. Перетаскивание узлов сохраняет их координаты в таблице `services` (`position_x`/`position_y`), поэтому раскладка переживает перезагрузку страницы и смену браузера; в snapshot координаты не попадают.
+The graph editor uses locally built React Flow and `dagre` assets. After changing `frontend/` files, run `npm ci && npm run build` from `frontend/`, then rebuild the backend. No runtime network fetches. Dragged node positions are stored in `services` table (`position_x`/`position_y`), so layout survives page reload and browser change; positions are not included in snapshots.
 
-Плагин Docker активен в профиле `docker` по умолчанию; для Kubernetes используйте `SPRING_PROFILES_ACTIVE=k8s`, `SDDP_K8S_NAMESPACE` и `SDDP_K8S_POLL_SECONDS`. Для выполнения Docker-плагинов процессу нужен доступ к Docker socket. Полный runtime acceptance с реальными PostgreSQL/Docker/Kubernetes стендами требует соответствующей инфраструктуры; локально проверены компиляция и unit-тесты.
+Docker plugin is active in the `docker` profile (default); for Kubernetes use `SPRING_PROFILES_ACTIVE=k8s`, `SDDP_K8S_NAMESPACE`, and `SDDP_K8S_POLL_SECONDS`. The process needs Docker socket access for Docker plugins. Full runtime acceptance with real PostgreSQL/Docker/Kubernetes requires corresponding infrastructure; locally only compilation and unit tests are verified.
 
-Kubernetes-исполнитель передаёт IR через временный ConfigMap и считывает архив результатов из журнала pod. Образ плагина должен содержать `/bin/sh`, `plugin`, `tar`, `gzip`, `base64` и `tr`. ServiceAccount backend требует права создавать и удалять ConfigMap и Job, читать статус Job, список pod и их журналы. Для запрета сетевого доступа плагинов в кластере необходима отдельная NetworkPolicy; без неё air-gapped изоляция Job не гарантирована. Работа с реальным Kubernetes-кластером пока не проверена.
+The Kubernetes executor passes IR via a temporary ConfigMap and reads the result archive from the pod log. Plugin image must contain `/bin/sh`, `plugin`, `tar`, `gzip`, `base64`, and `tr`. Backend ServiceAccount needs permissions to create/delete ConfigMap and Job, read Job status, list pods and their logs. To forbid plugin network access in the cluster, a separate NetworkPolicy is required; without it, air-gapped isolation of the Job is not guaranteed. Real Kubernetes cluster execution not yet verified.
 
-Встроенный REST-генератор использует `timeout_ms` для подключения и чтения, а `retries` — для повторов при ошибках сетевого доступа (значения по умолчанию: 5000 мс и 3 повтора). Повтор POST может привести к дублированию операции, если сервер обработал запрос до потери соединения; целевой API должен обеспечивать идемпотентность. MTLS и JWT встроенным генератором пока не поддерживаются и требуют подходящего плагина.
+The built-in REST generator uses `timeout_ms` for connect/read and `retries` for network error retries (defaults: 5000 ms and 3). A retried POST may duplicate the operation if the server processed the request before the connection dropped; target API must ensure idempotency. MTLS and JWT are not supported by the built-in generator and require a suitable plugin.
 
-Сгенерированный REST-клиент использует `io.github.resilience4j:resilience4j-circuitbreaker:2.3.0`. Circuit breaker открывается после пяти вызовов с ошибками сетевого доступа и через 30 секунд допускает пробные вызовы; ошибка передаётся вызывающей стороне, а не подменяется успешным ответом. Эту зависимость необходимо включить в проект, использующий сгенерированный код.
+The generated REST client uses `io.github.resilience4j:resilience4j-circuitbreaker:2.3.0`. Circuit breaker opens after five network-access errors and permits probe calls after 30 seconds; errors are propagated to the caller, not masked as success. This dependency must be included in the project consuming the generated code.
 
-Docker integration test запускается после локальной сборки образа `docker build --network=none -t sddp-plugin-fixture:local src/test/resources/docker-plugin` с переменной `SDDP_DOCKER_IT=true`. Для Docker Desktop на Windows можно указать `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine`: оба интеграционных сценария проверены через этот named pipe. На Linux используется стандартный Unix socket. Не открывайте Docker API в сеть без защиты: доступ к нему эквивалентен административному доступу к хосту.
+Docker integration test runs after building the fixture image locally: `docker build --network=none -t sddp-plugin-fixture:local src/test/resources/docker-plugin` with `SDDP_DOCKER_IT=true`. On Windows with Docker Desktop, set `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine`; both integration scenarios verified via this named pipe. On Linux, standard Unix socket is used. Never expose Docker API to the network unprotected: access equals host admin.
+
+## Acceptance Checklist
+
+Before delivery, the system is verified against:
+
+1. **Compile-time immutability** — generated Java code contains no dynamic reconfiguration or external server polling; everything runs on static Spring properties.
+2. **No PII** — no DB table contains columns for personal names, emails, phones, or user tokens; only integration metadata schemas.
+3. **Clean Code & Error Specification** — if a Docker plugin container exits non-zero, the backend captures its `stderr` and throws `PluginGenerationException` with the log.
+4. **Kubernetes-native readiness** — K8s Job management code is isolated in `@Profile("k8s")`, so the project runs locally without Kubernetes via the standard `@Profile("docker")`.

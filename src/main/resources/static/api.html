@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="api.title">API operation · SDDP</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body data-page="api">
+  <div id="app-shell"></div>
+  <main class="page">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/index.html" data-i18n="nav.projects">Projects</a>
+      <span class="breadcrumb-sep">/</span>
+      <a id="breadcrumbProject" href="/project.html" data-i18n="service.breadcrumbProject">Project</a>
+      <span class="breadcrumb-sep">/</span>
+      <a id="breadcrumbService" href="/service.html" data-i18n="service.breadcrumbService">Service</a>
+      <span class="breadcrumb-sep">/</span>
+      <span id="breadcrumbApi" data-i18n="api.breadcrumb">API operation</span>
+    </nav>
+
+    <div class="page-head">
+      <div>
+        <h1 id="apiTitle" data-i18n="api.heading">API operation</h1>
+        <p id="apiSubtitle" data-i18n="api.loading">Loading…</p>
+      </div>
+      <div id="apiActions" class="page-actions"></div>
+    </div>
+
+    <section id="viewPanel" class="side-stack" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="api.descriptionHeading">Operation description</h2>
+          <span id="viewVersion" class="badge accent">v1</span>
+        </div>
+        <p id="viewDescription" class="hint" data-i18n="api.noDescription">No description</p>
+        <div class="detail-grid section-gap">
+          <div><span data-i18n="api.pattern">Pattern</span><strong id="viewPattern">—</strong></div>
+          <div><span data-i18n="api.created">Created</span><strong id="viewCreated">—</strong></div>
+          <div><span data-i18n="api.id">ID</span><code id="viewId">—</code></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2 data-i18n="api.schemas">Schemas</h2></div>
+        <p class="hint" data-i18n="api.schemasHint">Schemas are shown as a field tree. JSON is available only via the "Show JSON" button.</p>
+        <div class="api-schema view-schemas section-gap">
+          <section>
+            <h4 data-i18n="api.request">Request</h4>
+            <div id="viewRequest"></div>
+            <button class="link" type="button" data-json-toggle="viewRequestJson" data-i18n="common.showJson">Show JSON</button>
+            <pre id="viewRequestJson" class="json-preview" hidden>{}</pre>
+          </section>
+          <section>
+            <h4 data-i18n="api.response">Response</h4>
+            <div id="viewResponse"></div>
+            <button class="link" type="button" data-json-toggle="viewResponseJson" data-i18n="common.showJson">Show JSON</button>
+            <pre id="viewResponseJson" class="json-preview" hidden>{}</pre>
+          </section>
+        </div>
+      </section>
+    </section>
+
+    <section id="formPanel" class="card" hidden>
+      <div class="card-head">
+        <h2 id="apiFormTitle" data-i18n="api.formNew">New API operation</h2>
+        <span id="apiFormBadge" class="badge">create</span>
+      </div>
+      <p class="hint" data-i18n="api.formHint">Changes are saved to the selected version. If the operation is used in connections, verify the field mapping after saving.</p>
+      <form id="apiForm" class="form">
+        <div class="form-row form-row-3">
+          <label>
+            <span data-i18n="api.name">API name</span>
+            <input id="apiName" placeholder="createOrder" autocomplete="off" required>
+          </label>
+          <label>
+            <span data-i18n="api.version">Version</span>
+            <input id="apiVersion" value="1" autocomplete="off" required>
+          </label>
+          <label>
+            <span data-i18n="api.pattern">Pattern</span>
+            <select id="apiPattern">
+              <option value="REQUEST_RESPONSE">REQUEST_RESPONSE</option>
+              <option value="PUB_SUB">PUB_SUB</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span data-i18n="api.description">Description</span>
+          <textarea id="apiDescription" data-i18n-placeholder="api.descriptionPlaceholder"></textarea>
+        </label>
+
+        <section class="schema-section">
+          <div class="card-head">
+            <h3 data-i18n="api.requestSchema">Request schema</h3>
+            <button id="addRequestField" class="secondary" type="button" data-i18n="api.addField">Add field</button>
+          </div>
+          <div id="requestSchemaEditor" class="schema-editor"></div>
+          <div class="section-gap">
+            <button class="link" type="button" data-json-toggle="requestSchemaPreview" data-i18n="common.showJson">Show JSON</button>
+            <pre id="requestSchemaPreview" class="section-gap json-preview" hidden>{}</pre>
+          </div>
+        </section>
+
+        <section class="schema-section">
+          <div class="card-head">
+            <h3 data-i18n="api.responseSchema">Response schema</h3>
+            <button id="addResponseField" class="secondary" type="button" data-i18n="api.addField">Add field</button>
+          </div>
+          <div id="responseSchemaEditor" class="schema-editor"></div>
+          <div class="section-gap">
+            <button class="link" type="button" data-json-toggle="responseSchemaPreview" data-i18n="common.showJson">Show JSON</button>
+            <pre id="responseSchemaPreview" class="section-gap json-preview" hidden>{}</pre>
+          </div>
+        </section>
+
+        <div class="button-row">
+          <button id="saveApi" type="submit" data-i18n="api.create">Create API</button>
+          <a id="cancelApi" class="button-link secondary" href="#" data-i18n="api.cancel">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    <section id="deletePanel" class="card" hidden>
+      <div class="card-head">
+        <h2 data-i18n="api.deleteHeading">Delete API operation</h2>
+        <span id="deleteVersion" class="badge accent">v1</span>
+      </div>
+      <p class="hint" data-i18n="api.deleteHint">Deletion is irreversible. If the API is used in connections, the platform will not allow deletion: change or delete those connections first.</p>
+      <div id="deleteSummary" class="detail-grid section-gap"></div>
+      <form id="deleteForm" class="form section-gap">
+        <label class="inline">
+          <input id="confirmDelete" type="checkbox" required>
+          <span data-i18n="api.confirmDelete">I confirm the deletion of this API operation</span>
+        </label>
+        <div class="button-row">
+          <button class="danger" type="submit" data-i18n="api.delete">Delete API</button>
+          <a id="cancelDelete" class="button-link secondary" href="#" data-i18n="api.cancel">Cancel</a>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/i18n.js"></script>
+  <script src="/common.js"></script>
+  <script src="/schema-editor.js"></script>
+  <script src="/api.js"></script>
+</body>
+</html>

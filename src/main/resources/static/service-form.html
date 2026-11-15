@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="serviceForm.title">Service form · SDDP</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body data-page="service-form">
+  <div id="app-shell"></div>
+  <main class="page">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/index.html" data-i18n="nav.projects">Projects</a>
+      <span class="breadcrumb-sep">/</span>
+      <a id="breadcrumbProject" href="/project.html" data-i18n="service.breadcrumbProject">Project</a>
+      <span class="breadcrumb-sep">/</span>
+      <span id="breadcrumbService" data-i18n="service.breadcrumbService">Service</span>
+    </nav>
+
+    <div class="page-head">
+      <div>
+        <h1 id="formTitle" data-i18n="serviceForm.mode.create">New service</h1>
+        <p id="formSubtitle" data-i18n="service.loading">Loading…</p>
+      </div>
+      <div id="formActions" class="page-actions"></div>
+    </div>
+
+    <section id="formPanel" class="card" hidden>
+      <div class="card-head">
+        <h2 id="editorTitle" data-i18n="serviceForm.mode.create">New service</h2>
+        <span id="formBadge" class="badge">create</span>
+      </div>
+      <p class="hint" data-i18n="serviceForm.formHint">The service name is unique within the project and becomes the participant name in the IR manifest.</p>
+      <form id="serviceForm" class="form">
+        <label>
+          <span data-i18n="service.name">Service name</span>
+          <input id="serviceName" placeholder="order-service" autocomplete="off" required>
+        </label>
+        <label>
+          <span data-i18n="service.type">Service type</span>
+          <select id="serviceType">
+            <option value="CORE" data-i18n="project.serviceType.core">CORE — internal service</option>
+            <option value="EXTERNAL" data-i18n="project.serviceType.external">EXTERNAL — external system</option>
+            <option value="ADAPTER" data-i18n="project.serviceType.adapter">ADAPTER — integration adapter</option>
+          </select>
+        </label>
+        <label>
+          <span data-i18n="service.description">Description</span>
+          <textarea id="serviceDescription" data-i18n-placeholder="service.descriptionPlaceholder"></textarea>
+        </label>
+        <div class="button-row">
+          <button id="saveService" type="submit" data-i18n="serviceForm.save.create">Create service</button>
+          <a id="cancelService" class="button-link secondary" href="#" data-i18n="common.cancel">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    <section id="deletePanel" class="card" hidden>
+      <div class="card-head">
+        <h2 data-i18n="serviceForm.deleteHeading">Delete service</h2>
+        <span id="deleteBadge" class="badge accent">delete</span>
+      </div>
+      <p class="hint" data-i18n="serviceForm.deleteHint">Deletion is irreversible. If the service is used in connections, the platform will not allow deletion: change or delete those connections first.</p>
+      <div id="deleteSummary" class="detail-grid section-gap"></div>
+      <form id="deleteForm" class="form section-gap">
+        <label class="inline">
+          <input id="confirmDelete" type="checkbox" required>
+          <span data-i18n="serviceForm.confirmDelete">I confirm the deletion of this service</span>
+        </label>
+        <div class="button-row">
+          <button class="danger" type="submit" data-i18n="serviceForm.deleteAction">Delete service</button>
+          <a id="cancelDelete" class="button-link secondary" href="#" data-i18n="common.cancel">Cancel</a>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/i18n.js"></script>
+  <script src="/common.js"></script>
+  <script src="/service-form.js"></script>
+</body>
+</html>

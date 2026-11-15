@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="graph.title">Graph editor · SDDP</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/flow/graph.css">
+</head>
+<body data-page="graph">
+  <div id="app-shell"></div>
+  <main class="page">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/index.html" data-i18n="nav.projects">Projects</a>
+      <span class="breadcrumb-sep">/</span>
+      <a id="breadcrumbProject" href="/project.html" data-i18n="service.breadcrumbProject">Project</a>
+      <span class="breadcrumb-sep">/</span>
+      <span data-i18n="graph.breadcrumb">Graph</span>
+    </nav>
+
+    <div class="page-head">
+      <div>
+        <h1 data-i18n="graph.heading">Connection graph</h1>
+        <p data-i18n="graph.subtitle">Drag from a service to another service to create a connection. Click a connection to inspect it and see schema issues — for example, missing required fields.</p>
+      </div>
+      <div class="page-actions">
+        <a id="toConnections" class="button-link secondary" href="#" data-i18n="connection.toConnections">Back to connections</a>
+        <button id="reloadGraph" class="secondary" type="button" data-i18n="project.refresh">Refresh</button>
+      </div>
+    </div>
+
+    <div class="layout layout-sidebar">
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="graph.canvasHeading">Topology canvas</h2>
+          <div id="graphLegend" class="graph-legend"></div>
+        </div>
+        <p class="hint"><span data-i18n="graph.canvasHint">Green — valid connection, amber — warnings, red — errors. Drag a handle on the right side of a service onto another service.</span> <span id="graphEnvironmentNote"></span></p>
+        <div class="graph-toolbar">
+          <label class="graph-toolbar-field">
+            <span data-i18n="graph.layoutDirection">Direction</span>
+            <select id="layoutDirection">
+              <option value="LR" data-i18n="graph.dirLr">Left → Right</option>
+              <option value="RL" data-i18n="graph.dirRl">Right → Left</option>
+              <option value="TB" data-i18n="graph.dirTb">Top → Bottom</option>
+              <option value="BT" data-i18n="graph.dirBt">Bottom → Top</option>
+            </select>
+          </label>
+          <button id="autoLayout" class="secondary" type="button" data-i18n="graph.autoLayout">Auto-layout</button>
+          <button id="fitView" class="secondary" type="button" data-i18n="graph.fitView">Fit view</button>
+        </div>
+        <div id="graph" class="graph-canvas section-gap"></div>
+      </section>
+
+      <aside class="side-stack">
+        <section class="card">
+          <div class="card-head">
+            <h2 data-i18n="graph.selectedHeading">Selected connection</h2>
+            <span id="selectedBadge" class="badge">—</span>
+          </div>
+          <div id="selectedConnection"><div class="empty-state" data-i18n="graph.selectedHint">Click an edge on the graph.</div></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2 data-i18n="graph.issuesHeading">Schema validation</h2>
+            <span id="issueCount" class="badge">0</span>
+          </div>
+          <div id="issueList"><div class="empty-state" data-i18n="graph.issuesEmpty">No issues found in this environment.</div></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div id="connectOverlay" class="modal-overlay" hidden>
+    <section class="card modal-card" role="dialog" aria-modal="true" aria-labelledby="connectTitle">
+      <div class="card-head">
+        <h2 id="connectTitle" data-i18n="graph.connectHeading">New connection</h2>
+        <span class="badge">create</span>
+      </div>
+      <p class="hint" id="connectHint" data-i18n="graph.connectHint">The direction is taken from the graph drag. Choose the API operations to link.</p>
+      <form id="connectForm" class="form">
+        <div class="form-row">
+          <label><span data-i18n="graph.connectFrom">From (source)</span><input id="connectSource" readonly></label>
+          <label><span data-i18n="graph.connectTo">To (target)</span><input id="connectTarget" readonly></label>
+        </div>
+        <div class="form-row">
+          <label><span data-i18n="project.sourceApi">Source API</span><select id="connectSourceApi"></select></label>
+          <label><span data-i18n="project.targetApi">Target API</span><select id="connectTargetApi" required></select></label>
+        </div>
+        <div class="form-row">
+          <label><span data-i18n="project.transport">Transport</span>
+            <select id="connectTransport"><option>REST</option><option>GRPC</option><option>KAFKA</option><option>RABBITMQ</option></select>
+          </label>
+          <label><span data-i18n="project.endpoint">Endpoint / topic</span><input id="connectEndpoint" value="/"></label>
+        </div>
+        <p class="hint" data-i18n="graph.mappingHint">Field mapping can be configured later on the connection page; validation highlights what is missing.</p>
+        <div id="connectProtectedRow" class="form" hidden>
+          <label class="inline">
+            <input id="connectProtected" type="checkbox">
+            <span id="connectProtectedText"></span>
+          </label>
+        </div>
+        <p id="connectError" class="hint" hidden></p>
+        <div class="button-row">
+          <button id="connectSave" type="submit" data-i18n="connection.save.create">Create connection</button>
+          <button id="connectCancel" class="secondary" type="button" data-i18n="common.cancel">Cancel</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="/i18n.js"></script>
+  <script>
+    (() => {
+      // Some environments (automation browsers, embedded webviews) accept
+      // ResizeObserver but never deliver callbacks. React Flow relies on them
+      // to measure nodes and handles, so install a polling implementation.
+      class PollingResizeObserver {
+        constructor(callback) {
+          this.callback = callback;
+          this.observations = new Map();
+          this.timer = setInterval(() => this.check(), 80);
+        }
+        observe(target) {
+          this.observations.set(target, null);
+          this.check();
+        }
+        unobserve(target) { this.observations.delete(target); }
+        disconnect() { this.observations.clear(); clearInterval(this.timer); }
+        check() {
+          const entries = [];
+          for (const [target, previous] of this.observations) {
+            const rect = target.getBoundingClientRect();
+            const current = { x: rect.x, y: rect.y, top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+            const changed = previous === null
+              || previous.width !== current.width
+              || previous.height !== current.height;
+            if (changed) {
+              this.observations.set(target, current);
+              const box = [{ inlineSize: current.width, blockSize: current.height }];
+              entries.push({
+                target,
+                contentRect: current,
+                borderBoxSize: box,
+                contentBoxSize: box,
+                devicePixelContentBoxSize: box,
+              });
+            }
+          }
+          if (entries.length) this.callback(entries, this);
+        }
+      }
+      window.ResizeObserver = PollingResizeObserver;
+    })();
+  </script>
+  <script src="/common.js"></script>
+  <script src="/flow/graph.js"></script>
+  <script src="/graph-page.js"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sddp
+      POSTGRES_USER: sddp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sddp}
+    ports:
+      - "5432:5432"
+    volumes:
+      - sddp-postgres-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sddp -d sddp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - sddp-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    image: sddp-dev:latest
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SddP_DB_URL: jdbc:postgresql://postgres:5432/sddp
+      SddP_DB_USERNAME: sddp
+      SddP_DB_PASSWORD: ${POSTGRES_PASSWORD:-sddp}
+      MAVEN_OPTS: "-DskipTests"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./src:/app/src
+      - ./pom.xml:/app/pom.xml
+      - ~/.m2:/root/.m2
+    working_dir: /app
+    command: mvn spring-boot:run -Dspring-boot.run.fork=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sddp-net
+
+volumes:
+  sddp-postgres-dev:
+
+networks:
+  sddp-net:
+    driver: bridge

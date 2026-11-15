@@ -1,0 +1,44 @@
+# Build artifacts
+target/
+*.jar
+*.war
+*.ear
+
+# IDE and editor
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+
+# Git
+.git/
+.gitignore
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
+
+# Test reports
+target/surefire-reports/
+target/failsafe-reports/
+
+# Frontend build (built assets are copied to static/flow/)
+frontend/node_modules/
+frontend/dist/
+frontend/.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp

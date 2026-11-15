@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY_GHCR: ghcr.io
+  REGISTRY_DOCKERHUB: docker.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sddp
+          POSTGRES_USER: sddp
+          POSTGRES_PASSWORD: sddp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U sddp -d sddp"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Extract Maven version
+        id: maven-version
+        run: |
+          VERSION=$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Strip -SNAPSHOT for tagging
+          CLEAN_VERSION=${VERSION%-SNAPSHOT}
+          echo "clean_version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build and test with Maven
+        run: mvn -B verify
+        env:
+          SddP_DB_URL: jdbc:postgresql://localhost:5432/sddp
+          SddP_DB_USERNAME: sddp
+          SddP_DB_PASSWORD: sddp
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: target/surefire-reports/
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract Maven version
+        id: maven-version
+        run: |
+          VERSION=$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          CLEAN_VERSION=${VERSION%-SNAPSHOT}
+          echo "clean_version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Determine tags
+        id: tags
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          VERSION=${{ steps.maven-version.outputs.clean_version }}
+          TAGS=""
+
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag push: v1.2.3 -> tag as 1.2.3, also major.minor
+            TAG_VERSION=${GITHUB_REF_NAME#v}
+            TAGS="${TAGS}${REGISTRY_GHCR}/${IMAGE_NAME}:${TAG_VERSION},${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:${TAG_VERSION}"
+            # Major.minor tag
+            MAJOR_MINOR=$(echo $TAG_VERSION | cut -d. -f1,2)
+            TAGS="${TAGS},${REGISTRY_GHCR}/${IMAGE_NAME}:${MAJOR_MINOR},${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:${MAJOR_MINOR}"
+            # Latest on release tags
+            TAGS="${TAGS},${REGISTRY_GHCR}/${IMAGE_NAME}:latest,${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:latest"
+          else
+            # Main branch: version-SHA, clean_version, latest
+            TAGS="${TAGS}${REGISTRY_GHCR}/${IMAGE_NAME}:${VERSION}-${SHA},${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:${VERSION}-${SHA}"
+            TAGS="${TAGS},${REGISTRY_GHCR}/${IMAGE_NAME}:${VERSION},${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:${VERSION}"
+            TAGS="${TAGS},${REGISTRY_GHCR}/${IMAGE_NAME}:latest,${REGISTRY_DOCKERHUB}/${IMAGE_NAME}:latest"
+          fi
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        with:
+          registry: ${{ env.REGISTRY_DOCKERHUB }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}
+            ${{ env.REGISTRY_DOCKERHUB }}/${{ env.IMAGE_NAME }}
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.maven-version.outputs.clean_version }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.maven-version.outputs.clean_version }}
+            GITHUB_REPOSITORY=${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  docker-plugin-test:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build plugin fixture image
+        run: |
+          docker build --network=none -t sddp-plugin-fixture:local ./src/test/resources/docker-plugin
+
+      - name: Run Docker plugin integration test
+        env:
+          SDDP_DOCKER_IT: "true"
+          SddP_DB_URL: jdbc:postgresql://localhost:5432/sddp
+          SddP_DB_USERNAME: sddp
+          SddP_DB_PASSWORD: sddp
+        run: mvn -B -Dtest=DockerPluginIntegrationTest test

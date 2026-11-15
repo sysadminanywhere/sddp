@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="project.title">Project · SDDP</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body data-page="project">
+  <div id="app-shell"></div>
+  <main class="page">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/index.html" data-i18n="nav.projects">Projects</a>
+      <span class="breadcrumb-sep">/</span>
+      <span id="breadcrumbProject" data-i18n="project.breadcrumb">Project</span>
+    </nav>
+
+    <div class="page-head">
+      <div>
+        <h1 id="projectTitle" data-i18n="project.heading">Project</h1>
+        <p id="projectSubtitle" data-i18n="project.loading">Loading…</p>
+      </div>
+      <div class="page-actions">
+        <button id="reloadProject" class="secondary" type="button" data-i18n="project.refresh">Refresh</button>
+      </div>
+    </div>
+
+    <nav class="tabs" aria-label="Project sections">
+      <button type="button" class="tab" data-tab="overview" aria-current="page" data-i18n="project.tab.overview">Overview</button>
+      <button type="button" class="tab" data-tab="services" data-i18n="project.tab.services">Services</button>
+      <button type="button" class="tab" data-tab="connections" data-i18n="project.tab.connections">Connections</button>
+      <button type="button" class="tab" data-tab="environments" data-i18n="project.tab.environments">Environments</button>
+      <button type="button" class="tab" data-tab="build" data-i18n="project.tab.build">Build</button>
+    </nav>
+
+    <section class="tab-panel" data-panel="overview">
+      <div class="stat-grid">
+        <article class="stat-card"><span data-i18n="project.stat.services">Services</span><strong id="statServices">0</strong></article>
+        <article class="stat-card"><span data-i18n="project.stat.connections">Connections in environment</span><strong id="statConnections">0</strong></article>
+        <article class="stat-card"><span data-i18n="project.stat.apis">API operations</span><strong id="statApis">0</strong></article>
+        <article class="stat-card"><span data-i18n="project.stat.environments">Environments</span><strong id="statEnvironments">0</strong></article>
+      </div>
+
+      <section class="card section-gap">
+        <div class="card-head"><h2 data-i18n="project.composition">Project composition</h2></div>
+        <p class="hint" data-i18n="project.compositionHint">Services describe integration participants, connections link their API operations, and the build turns the project into IR and code.</p>
+        <div class="quick-grid section-gap">
+          <button type="button" class="quick-card" data-goto="services">
+            <strong data-i18n="project.quick.services">Services</strong>
+            <span data-i18n="project.quick.servicesHint">Project participants and their API descriptions</span>
+          </button>
+          <button type="button" class="quick-card" data-goto="connections">
+            <strong data-i18n="project.quick.connections">Connections</strong>
+            <span data-i18n="project.quick.connectionsHint">Directions, transports, and field mapping</span>
+          </button>
+          <button type="button" class="quick-card" data-goto="environments">
+            <strong data-i18n="project.quick.environments">Environments</strong>
+            <span data-i18n="project.quick.environmentsHint">Independent connection sets, comparison, and copying</span>
+          </button>
+          <button type="button" class="quick-card" data-goto="build">
+            <strong data-i18n="project.quick.build">Build</strong>
+            <span data-i18n="project.quick.buildHint">IR manifest, code generation, and snapshot</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="card section-gap">
+        <div class="card-head">
+          <h2 data-i18n="project.overview.environmentsHeading">Project environments</h2>
+          <div class="button-row">
+            <span id="overviewEnvironmentCount" class="badge">0</span>
+            <button type="button" class="secondary" data-goto="environments" data-i18n="project.overview.manageEnvironments">Manage environments</button>
+          </div>
+        </div>
+        <p class="hint" data-i18n="project.overview.environmentsHint">An environment stores its own set of connections and connection settings. Switching the environment changes the Connections and Build sections.</p>
+        <div id="overviewEnvironments" class="environment-grid section-gap"></div>
+      </section>
+    </section>
+
+    <section class="tab-panel" data-panel="services" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="project.servicesHeading">Project services</h2>
+          <div class="button-row">
+            <span id="serviceCount" class="badge">0</span>
+            <a id="newService" class="button-link" href="#" data-i18n="project.newService">New service</a>
+          </div>
+        </div>
+        <p class="hint" data-i18n="project.servicesHint">A service owns API descriptions and participates in connections. Open a service to manage its API operations and connections.</p>
+        <div id="serviceList" class="service-grid section-gap"></div>
+      </section>
+    </section>
+
+    <section class="tab-panel" data-panel="connections" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="project.connectionsHeading">Environment connections</h2>
+          <div class="button-row">
+            <span id="connectionCount" class="badge">0</span>
+            <a id="graphEditor" class="button-link secondary" href="#" data-i18n="project.graphEditor">Graph editor</a>
+            <a id="newConnection" class="button-link" href="#" data-i18n="project.newConnection">New connection</a>
+          </div>
+        </div>
+        <p class="hint"><span data-i18n="project.connectionsHint">One connection describes one direction and one target service API operation. Mapping is configured in the connection editor.</span> <span id="connectionEnvironmentNote"></span></p>
+        <div id="connectionList" class="list section-gap"></div>
+      </section>
+    </section>
+
+    <section class="tab-panel" data-panel="environments" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="project.environmentsHeading">Project environments</h2>
+          <div class="button-row">
+            <span id="environmentCount" class="badge">0</span>
+            <a id="newEnvironment" class="button-link" href="#" data-i18n="project.newEnvironment">New environment</a>
+          </div>
+        </div>
+        <p class="hint" data-i18n="project.environmentsHint">An environment is a profile of connections and connection settings. Services and APIs are shared across the project, while connections and their settings are specific to each environment.</p>
+        <div id="environmentList" class="list section-gap"></div>
+
+        <div class="card-head section-gap"><h2 data-i18n="project.compareEnvironments">Compare environments</h2></div>
+        <div class="form-row">
+          <label><span data-i18n="project.environmentA">Environment A</span><select id="compareSource"></select></label>
+          <label><span data-i18n="project.environmentB">Environment B</span><select id="compareTarget"></select></label>
+        </div>
+        <div class="button-row section-gap">
+          <button id="compareEnvironments" class="secondary" type="button" data-i18n="project.compare">Compare</button>
+        </div>
+        <div id="comparisonSummary" class="empty-state section-gap" data-i18n="project.comparePlaceholder">Select two environments and click "Compare".</div>
+        <div id="comparisonList" class="diff-list section-gap"></div>
+
+        <div class="card-head section-gap"><h2 data-i18n="project.copyConnections">Copy connections</h2></div>
+        <p class="hint" data-i18n="project.copyHint">MERGE adds only the missing connections to the target environment. REPLACE deletes all target connections first, then copies the source.</p>
+        <div class="form-row form-row-3">
+          <label><span data-i18n="project.source">Source</span><select id="copySource"></select></label>
+          <label><span data-i18n="project.target">Target</span><select id="copyTarget"></select></label>
+          <label><span data-i18n="project.mode">Mode</span>
+            <select id="copyMode">
+              <option value="MERGE" data-i18n="project.modeMerge">MERGE — add missing</option>
+              <option value="REPLACE" data-i18n="project.modeReplace">REPLACE — replace all</option>
+            </select>
+          </label>
+        </div>
+        <div class="button-row section-gap">
+          <button id="copyConnections" type="button" data-i18n="project.copyButton">Copy connections</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="tab-panel" data-panel="build" hidden>
+      <div class="layout layout-2">
+        <section class="card">
+          <div class="card-head">
+            <h2 data-i18n="project.irHeading">IR manifest</h2>
+            <div class="button-row">
+              <button id="buildIr" type="button" data-i18n="project.buildIr">Build IR</button>
+              <button id="downloadIr" class="secondary" type="button" disabled data-i18n="project.downloadJson">Download JSON</button>
+            </div>
+          </div>
+          <p class="hint" data-i18n="project.irHint">IR is built from the services and connections of the selected environment and validated against the core JSON schema.</p>
+          <div id="irEmpty" class="empty-state section-gap" data-i18n="project.irEmpty">Click "Build IR" to build the manifest.</div>
+          <button id="toggleIrJson" class="link" type="button" data-json-toggle="irOutput" hidden data-i18n="common.showJson">Show JSON</button>
+          <pre id="irOutput" class="section-gap json-preview" hidden></pre>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2 data-i18n="project.codegenHeading">Code generation</h2>
+            <button id="reloadPlugins" class="secondary" type="button" data-i18n="project.reloadPlugins">Reload plugins</button>
+          </div>
+          <form id="codegenForm" class="form">
+            <div class="form-row">
+              <label>
+                <span data-i18n="project.package">Java package</span>
+                <input id="packageName" value="ru.sddp.generated" autocomplete="off" required>
+              </label>
+              <label>
+                <span data-i18n="project.clientName">Client name</span>
+                <input id="clientName" value="GeneratedClient" autocomplete="off" required>
+              </label>
+            </div>
+            <label>
+              <span data-i18n="project.executor">Executor</span>
+              <select id="pluginSelect"><option value="" data-i18n="project.builtinGenerator">Built-in REST generator (FreeMarker)</option></select>
+            </label>
+            <p id="pluginHint" class="hint" data-i18n="project.pluginHint">Built-in generator supports only REST, REQUEST_RESPONSE, and security_type=NONE.</p>
+            <div class="button-row"><button type="submit" data-i18n="project.generate">Generate</button></div>
+          </form>
+        </section>
+      </div>
+
+      <section class="card section-gap">
+        <div class="card-head">
+          <h2 data-i18n="project.resultHeading">Generation result</h2>
+          <span id="resultBadge" class="badge" data-i18n="project.notRun">not run yet</span>
+        </div>
+        <div id="codegenResult"><div class="empty-state" data-i18n="project.resultEmpty">Generated files will appear here.</div></div>
+      </section>
+
+      <section class="card section-gap">
+        <div class="card-head"><h2 data-i18n="project.snapshotHeading">Project snapshot</h2></div>
+        <p class="hint" data-i18n="project.snapshotHint">Snapshot stores services, API descriptions, environments, connections, and mapping. You can export all environments or only the selected one. Format v2 is import-compatible; legacy v1 snapshots migrate contracts into services.</p>
+        <div class="form-row">
+          <label>
+            <span data-i18n="project.snapshotEnvironment">Snapshot environment</span>
+            <select id="snapshotEnvironment"><option value="" data-i18n="project.allEnvironments">All environments</option></select>
+          </label>
+        </div>
+        <div class="button-row section-gap"><button id="exportSnapshot" class="secondary" type="button" data-i18n="project.exportSnapshot">Export snapshot</button></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/i18n.js"></script>
+  <script src="/common.js"></script>
+  <script src="/project.js"></script>
+</body>
+</html>

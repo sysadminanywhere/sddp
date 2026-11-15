@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="connection.title">Connection · SDDP</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body data-page="connection">
+  <div id="app-shell"></div>
+  <main class="page">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/index.html" data-i18n="nav.projects">Projects</a>
+      <span class="breadcrumb-sep">/</span>
+      <a id="breadcrumbProject" href="/project.html" data-i18n="service.breadcrumbProject">Project</a>
+      <span class="breadcrumb-sep">/</span>
+      <span id="breadcrumbConnection" data-i18n="connection.breadcrumb">Connection</span>
+    </nav>
+
+    <div class="page-head">
+      <div>
+        <h1 id="formTitle" data-i18n="connection.heading">Connection</h1>
+        <p id="formSubtitle" data-i18n="connection.loading">Loading…</p>
+      </div>
+      <div id="formActions" class="page-actions"></div>
+    </div>
+
+    <section id="formPanel" class="card" hidden>
+      <div class="card-head">
+        <h2 id="editorTitle" data-i18n="connection.mode.create">New connection</h2>
+        <span id="formBadge" class="badge">create</span>
+      </div>
+      <p class="hint" data-i18n="project.connectionsHint">One connection describes one direction and one target service API operation. Mapping is configured in the connection editor.</p>
+      <form id="connectionForm" class="form">
+        <div class="form-row">
+          <label><span data-i18n="project.source">Source</span><select id="sourceService" required></select></label>
+          <label><span data-i18n="project.target">Target</span><select id="targetService" required></select></label>
+        </div>
+        <div class="form-row">
+          <label><span data-i18n="project.sourceApi">Source API</span><select id="sourceApi"><option value="" data-i18n="project.noSourceApiOption">No source API</option></select></label>
+          <label><span data-i18n="project.targetApi">Target API</span><select id="targetApi" required></select></label>
+        </div>
+        <div class="form-row">
+          <label><span data-i18n="project.transport">Transport</span>
+            <select id="transport">
+              <option>REST</option><option>GRPC</option><option>KAFKA</option><option>RABBITMQ</option>
+            </select>
+          </label>
+          <label><span data-i18n="project.environment">Environment</span><input id="connectionEnvironment" readonly></label>
+        </div>
+        <div class="form-row form-row-3">
+          <label><span data-i18n="project.host">Host / broker</span><input id="host" value="localhost"></label>
+          <label><span data-i18n="project.port">Port</span><input id="port" type="number" min="1" max="65535" value="8080"></label>
+          <label><span data-i18n="project.endpoint">Endpoint / topic</span><input id="endpoint" value="/"></label>
+        </div>
+        <details>
+          <summary class="hint" data-i18n="project.advanced">Advanced settings</summary>
+          <div class="form-row form-row-3 section-gap">
+            <label><span data-i18n="project.timeout">Timeout, ms</span><input id="timeout" type="number" min="0" value="5000"></label>
+            <label><span data-i18n="project.retries">Retries</span><input id="retries" type="number" min="0" max="10" value="3"></label>
+            <label><span data-i18n="project.security">Security</span>
+              <select id="security"><option>NONE</option><option>MTLS</option><option>JWT</option></select>
+            </label>
+          </div>
+        </details>
+
+        <div class="card-head section-gap">
+          <h3 data-i18n="project.fieldMapping">Field mapping</h3>
+          <div class="button-row">
+            <button id="addMappingRule" class="secondary" type="button" data-i18n="project.addRule">Add rule</button>
+            <button id="clearMapping" class="secondary" type="button" data-i18n="project.clear">Clear</button>
+          </div>
+        </div>
+        <p class="hint" data-i18n="project.mappingHint">Sources and targets are selected from the request schemas of the chosen APIs.</p>
+        <div id="mappingRules" class="list"></div>
+        <div class="section-gap">
+          <button class="link" type="button" data-json-toggle="mappingPreview" data-i18n="common.showJson">Show JSON</button>
+          <pre id="mappingPreview" class="section-gap json-preview" hidden>null</pre>
+        </div>
+
+        <div id="protectedConfirmRow" class="form section-gap" hidden>
+          <label class="inline">
+            <input id="confirmProtected" type="checkbox">
+            <span id="confirmProtectedText"></span>
+          </label>
+        </div>
+
+        <div class="button-row section-gap">
+          <button id="saveConnection" type="submit" data-i18n="connection.save.create">Create connection</button>
+          <a id="cancelConnection" class="button-link secondary" href="#" data-i18n="common.cancel">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    <section id="deletePanel" class="card" hidden>
+      <div class="card-head">
+        <h2 data-i18n="connection.deleteHeading">Delete connection</h2>
+        <span id="deleteBadge" class="badge accent">delete</span>
+      </div>
+      <p class="hint" data-i18n="connection.deleteHint">Deletion is irreversible. If the connection is in a protected environment, an extra confirmation is required.</p>
+      <div id="deleteSummary" class="detail-grid section-gap"></div>
+      <form id="deleteForm" class="form section-gap">
+        <label class="inline">
+          <input id="confirmDelete" type="checkbox" required>
+          <span data-i18n="connection.confirmDelete">I confirm the deletion of this connection</span>
+        </label>
+        <div id="protectedDeleteRow" class="form" hidden>
+          <label class="inline">
+            <input id="confirmProtectedDelete" type="checkbox">
+            <span id="confirmProtectedDeleteText"></span>
+          </label>
+        </div>
+        <div class="button-row">
+          <button class="danger" type="submit" data-i18n="connection.deleteAction">Delete connection</button>
+          <a id="cancelDelete" class="button-link secondary" href="#" data-i18n="common.cancel">Cancel</a>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/i18n.js"></script>
+  <script src="/common.js"></script>
+  <script src="/connection.js"></script>
+</body>
+</html>
