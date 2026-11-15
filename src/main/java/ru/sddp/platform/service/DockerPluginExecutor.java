@@ -4,7 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.*;
-import com.github.dockerjava.core.DockerClientBuilder;
+import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.zerodep.ZerodepDockerHttpClient;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
@@ -37,7 +37,7 @@ public class DockerPluginExecutor implements PluginExecutor {
             Files.writeString(input.resolve("ir.json"), mapper.writerWithDefaultPrettyPrinter().writeValueAsString(manifest));
             var config = DefaultDockerClientConfig.createDefaultConfigBuilder().build();
             var transport = new ZerodepDockerHttpClient.Builder().dockerHost(config.getDockerHost()).sslConfig(config.getSSLConfig()).build();
-            client = DockerClientBuilder.getInstance(config).withDockerHttpClient(transport).build();
+            client = DockerClientImpl.getInstance(config, transport);
             HostConfig hostConfig = new HostConfig().withNetworkMode("none").withMemory(536870912L).withNanoCPUs(1000000000L)
                 .withPidsLimit(128L).withReadonlyRootfs(true).withLogConfig(new LogConfig(LogConfig.LoggingType.JSON_FILE, Map.of("max-size", "1m", "max-file", "1")))
                 .withBinds(new Bind(input.toAbsolutePath().toString(), new Volume("/input"), com.github.dockerjava.api.model.AccessMode.ro))

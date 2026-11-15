@@ -1,0 +1,155 @@
+# SDDP on Kubernetes.
+#
+# Prerequisites:
+#   - an existing PostgreSQL database reachable from the cluster (see README)
+#   - a secret with the database password:
+#       kubectl -n sddp create secret generic sddp-db --from-literal=password='<password>'
+#   - the application image pushed to a registry the cluster can pull from
+#
+# Replace CHANGE_ME/sddp:0.1.0 and the database URL, then:
+#   kubectl create namespace sddp
+#   kubectl -n sddp apply -f deploy/kubernetes.yaml
+#
+# The Service is ClusterIP only. Expose it through an authenticated HTTPS
+# gateway or ingress; the application has no authentication of its own.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sddp
+  labels:
+    app.kubernetes.io/name: sddp
+---
+# Permissions used by the k8s plugin executor: one ConfigMap with the IR and
+# one Job per plugin run. The executor also reads the Job status and pod logs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sddp-plugin-runner
+  labels:
+    app.kubernetes.io/name: sddp
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sddp-plugin-runner
+  labels:
+    app.kubernetes.io/name: sddp
+subjects:
+  - kind: ServiceAccount
+    name: sddp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sddp-plugin-runner
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sddp
+  labels:
+    app.kubernetes.io/name: sddp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sddp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sddp
+    spec:
+      serviceAccountName: sddp
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: docker.io/CHANGE_ME/sddp:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: k8s
+            - name: SddP_DB_URL
+              value: jdbc:postgresql://postgres.example.internal:5432/sddp
+            - name: SddP_DB_USERNAME
+              value: sddp
+            - name: SddP_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sddp-db
+                  key: password
+            # Namespace where plugin Jobs and their ConfigMaps are created.
+            - name: SDDP_K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SDDP_MAX_REQUEST_BYTES
+              value: "10000000"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75.0"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Plugin execution and the JVM use the temporary directory.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sddp
+  labels:
+    app.kubernetes.io/name: sddp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: sddp
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
