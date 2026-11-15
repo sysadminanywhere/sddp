@@ -23,8 +23,17 @@ public class KubernetesJobPluginExecutor implements PluginExecutor {
     private static final String BEGIN = "SDDP_OUTPUT_BEGIN";
     private static final String END = "SDDP_OUTPUT_END";
     private final ObjectMapper mapper;
-    private final String namespace = System.getenv().getOrDefault("SDDP_K8S_NAMESPACE", "default");
-    public KubernetesJobPluginExecutor(ObjectMapper mapper) { this.mapper = mapper; }
+    private final String namespace;
+    private final long pollMillis;
+
+    public KubernetesJobPluginExecutor(ObjectMapper mapper) {
+        this.mapper = mapper;
+        this.namespace = System.getenv().getOrDefault("SDDP_K8S_NAMESPACE", "default");
+        String poll = System.getenv().getOrDefault("SDDP_K8S_POLL_SECONDS", "2");
+        try { this.pollMillis = Math.round(Double.parseDouble(poll) * 1000); }
+        catch (NumberFormatException e) { throw new IllegalStateException("Invalid SDDP_K8S_POLL_SECONDS: " + poll); }
+        if (pollMillis < 500) throw new IllegalStateException("SDDP_K8S_POLL_SECONDS must be at least 0.5");
+    }
 
     @Override
     public CodegenModels.PluginExecutionResult execute(ApiModels.IrManifest manifest, CodegenModels.PluginDescriptor plugin) {
@@ -55,7 +64,7 @@ public class KubernetesJobPluginExecutor implements PluginExecutor {
                     String logs = podLogs(core, name);
                     return new CodegenModels.PluginExecutionResult(0, "", "", extract(logs));
                 }
-                Thread.sleep(2000);
+                Thread.sleep(pollMillis);
             }
             throw new PluginGenerationException(-1, "Kubernetes Job timed out: " + name);
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new PluginGenerationException(-1, "Kubernetes Job interrupted"); }

@@ -402,7 +402,7 @@ management:
 | `SddP_DB_PASSWORD` | `sddp` | DB password |
 | `SPRING_PROFILES_ACTIVE` | `docker` | `docker` or `k8s` |
 | `SDDP_K8S_NAMESPACE` | `default` | K8s namespace for Jobs |
-| `SDDP_K8S_POLL_SECONDS` | `2` | Job status poll interval |
+| `SDDP_K8S_POLL_SECONDS` | `2` | Job status poll interval in seconds (minimum `0.5`) |
 | `SDDP_MAX_REQUEST_BYTES` | `10000000` | Maximum API request body in bytes, including chunked requests |
 
 API write requests exceeding the configured limit receive HTTP 413. The limit applies to snapshots, JSON schemas and other API request bodies; increase it deliberately for larger projects. It bounds each request, not the aggregate memory consumed by concurrent requests.
@@ -414,13 +414,12 @@ API write requests exceeding the configured limit receive HTTP 413. The limit ap
 ### Docker (Production)
 
 ```bash
-# Build
-docker build -t sddp:0.1.0 .
-
-# Run with compose
+# Build the image from this checkout and start the stack
 export POSTGRES_PASSWORD='<strong unique password>'
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+To run a prebuilt image instead, set `IMAGE_NAME` (repository) and `IMAGE_TAG` (defaults to `latest`) and skip the build: `IMAGE_NAME=docker.io/<owner>/sddp IMAGE_TAG=0.1.0 docker compose -f docker-compose.prod.yml up -d --no-build`. Step-by-step instructions for both paths are in the [README](README.md#docker-single-host).
 
 `docker-compose.prod.yml`:
 - `app` (built image) + `postgres:16-alpine`
@@ -473,10 +472,14 @@ docker compose -f docker-compose.dev.yml up app
 
 ### Kubernetes
 
-- Build image via CI → push to registry
-- Deploy with `SPRING_PROFILES_ACTIVE=k8s`
-- Grant ServiceAccount: `create/delete ConfigMap`, `create/delete Job`, `get/list/watch Pod/Job`, `get Pod/log`
-- Apply NetworkPolicy to restrict plugin pod egress
+- Manifests: [`deploy/kubernetes.yaml`](deploy/kubernetes.yaml) — Deployment, Service, ServiceAccount, namespace-scoped Role/RoleBinding; step-by-step instructions in the [README](README.md#kubernetes)
+- Image: the same Dockerfile image, started with `SPRING_PROFILES_ACTIVE=k8s` and a service account token mounted; PostgreSQL stays external and Flyway migrates on startup
+- Requires: `SDDP_K8S_NAMESPACE` (default `default`; the manifest takes it from `metadata.namespace`) and `SDDP_K8S_POLL_SECONDS` (default `2`, minimum `0.5`)
+- ServiceAccount permissions: `create/get/delete ConfigMap`, `create/get/delete Job`, `get/list Pod`, `get Pod/log`
+- Plugin Jobs: `backoffLimit: 0`, `activeDeadlineSeconds: 300`, read-only root filesystem, all capabilities dropped, no service account token; the executor waits up to 6 minutes
+- Limits: IR under 800 KB (ConfigMap data), plugin output under 5 MB compressed and 10 MB extracted
+- Images are started with `imagePullPolicy: IfNotPresent` and no `imagePullSecrets`; pre-pull them or attach a pull secret to the namespace's `default` service account
+- Apply a NetworkPolicy to restrict plugin pod egress
 
 ---
 
@@ -504,6 +507,10 @@ mvn spring-boot:run
 # or
 mvn verify  # unit tests and H2 integration; external integration tests are opt-in
 ```
+
+### Dependency Security
+
+`pom.xml` pins `jackson-bom.version` (Jackson 3) and `jackson-2-bom.version` (Jackson 2) because the versions managed by Spring Boot 4.0.9 — 3.1.7 and 2.21.7 — are affected by CVE-2026-110879; 3.1.8 and 2.21.8 are the patched releases. The same applies to the explicit Bouncy Castle, `commons-io` and resilience4j versions, which override older transitives from `docker-java` and `kubernetes-client`. When a Spring Boot patch release manages patched versions, the Jackson overrides can be dropped. Keep `mvn dependency:tree` and an OSV/GitHub advisory scan in the upgrade checklist.
 
 ### Test Categories
 

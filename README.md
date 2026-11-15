@@ -56,7 +56,7 @@ SDDP is an open-source platform for **spec-driven integration development**. Def
 
 ---
 
-## Quick Start
+## Quick Start (local development)
 
 ```bash
 # 1. Start database
@@ -70,6 +70,79 @@ mvn spring-boot:run
 **Default profiles:** `docker` (local), `k8s` (Kubernetes executor).
 
 The application has no built-in authentication. Keep it on a trusted host or network; for remote access, put it behind an authenticated HTTPS gateway and restrict direct access. See the security guidance in [Technical Reference](TECHNICAL.md#security-model).
+
+---
+
+## Install
+
+Both options run the same image: Java 21 runtime, non-root user, Flyway migrations applied on startup, HTTP on port 8080. They need a PostgreSQL 16 database with a user that may create tables in the target schema.
+
+### Docker (single host)
+
+Requires Docker Engine with the Compose plugin.
+
+```bash
+# Build the image from this checkout and start PostgreSQL + the application
+export POSTGRES_PASSWORD="$(openssl rand -base64 24)"
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Verify
+curl -fsS http://127.0.0.1:8080/actuator/health
+docker compose -f docker-compose.prod.yml logs -f app
+```
+
+`docker-compose.prod.yml` publishes the application only on `127.0.0.1:8080` and keeps PostgreSQL on an internal network with data in the `sddp-postgres` volume. `POSTGRES_PASSWORD` is required — do not reuse a password from an example.
+
+To run an image published by CI instead of building from source (images are pushed when `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` are configured, tagged `<version>`, `<version>-<sha>` and `latest`):
+
+```bash
+export POSTGRES_PASSWORD='<strong password>'
+export IMAGE_NAME=docker.io/<owner>/sddp
+export IMAGE_TAG=0.1.0   # any tag pushed by CI, or the full version
+
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d --no-build
+```
+
+Upgrades rebuild (`--build`) or pull (`--no-build`) the image and let Flyway migrate on startup; `docker compose down` keeps the database volume, `docker compose down -v` deletes it. Use `SDDP_MAX_REQUEST_BYTES` to change the API body limit, and put [Caddy or another authenticated gateway](TECHNICAL.md#https-gateway-optional) in front of the app before exposing it. Back up the database with the commands in [Technical Reference](TECHNICAL.md#database-backup-and-recovery) before upgrading.
+
+### Kubernetes
+
+[`deploy/kubernetes.yaml`](deploy/kubernetes.yaml) contains a Deployment, Service, ServiceAccount and the namespace-scoped Role the k8s plugin executor needs to create its Jobs.
+
+1. Build and push the image to a registry the cluster can pull from:
+
+   ```bash
+   docker build -t registry.example.com/sddp:0.1.0 .
+   docker push registry.example.com/sddp:0.1.0
+   ```
+
+2. Create the namespace and the database password secret:
+
+   ```bash
+   kubectl create namespace sddp
+   kubectl -n sddp create secret generic sddp-db --from-literal=password='<strong password>'
+   ```
+
+3. Point the manifest at your image and database — `image`, `SddP_DB_URL` and `SddP_DB_USERNAME` in `deploy/kubernetes.yaml`. PostgreSQL is expected to be external (managed service or an operator); the app only needs a reachable JDBC URL and a user allowed to create tables.
+
+4. Apply and wait for the rollout:
+
+   ```bash
+   kubectl -n sddp apply -f deploy/kubernetes.yaml
+   kubectl -n sddp rollout status deployment/sddp
+   ```
+
+5. Reach the API locally, then expose it through an authenticated ingress or gateway:
+
+   ```bash
+   kubectl -n sddp port-forward svc/sddp 8080:80
+   curl -fsS http://127.0.0.1:8080/actuator/health
+   ```
+
+The pod runs as UID 1000 with a read-only root filesystem, no Linux capabilities and `/tmp` on an `emptyDir`. `SDDP_K8S_NAMESPACE` is taken from the pod's namespace, so plugin Jobs and ConfigMaps are created next to the application. The container mounts a service account token because the executor calls the Kubernetes API; plugin Job pods explicitly do not.
+
+Plugin images are started with `imagePullPolicy: IfNotPresent` and no `imagePullSecrets` of their own, so either pre-pull them on the nodes or attach a pull secret to the namespace's `default` service account. The executor polls Job status every `SDDP_K8S_POLL_SECONDS` (default `2`, minimum `0.5`); raise it if many builds run concurrently and the API server rate-limits the application. The application keeps no local state, so additional replicas can be added behind the Service; only the database needs to be shared.
 
 ---
 

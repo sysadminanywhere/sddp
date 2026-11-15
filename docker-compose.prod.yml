@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE_NAME:-sddp}:latest
+    image: ${IMAGE_NAME:-sddp}:${IMAGE_TAG:-latest}
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SddP_DB_URL: jdbc:postgresql://postgres:5432/sddp
