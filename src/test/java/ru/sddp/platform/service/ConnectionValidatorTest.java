@@ -19,4 +19,12 @@ class ConnectionValidatorTest {
         var mapping = mapper.readTree("{\"source_contract\":\"a\",\"target_contract\":\"b\",\"transformations\":[{\"type\":\"SCRIPT\",\"to\":\"$.x\"}]}");
         assertThrows(IllegalArgumentException.class, () -> validator.validate("DEV", "REST", validSettings, mapping));
     }
+    @Test void requiresHttpsForJwtAndValidatesRestScheme() throws Exception {
+        var jwtOverHttp = mapper.readTree("{\"host\":\"legacy\",\"port\":80,\"target_endpoint\":\"/\",\"security_type\":\"JWT\"}");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate("DEV", "REST", jwtOverHttp, null));
+        var invalidScheme = mapper.readTree("{\"host\":\"legacy\",\"port\":80,\"target_endpoint\":\"/\",\"scheme\":\"ftp\"}");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate("DEV", "REST", invalidScheme, null));
+        var jwtOverHttps = mapper.readTree("{\"host\":\"legacy\",\"port\":443,\"target_endpoint\":\"/\",\"scheme\":\"https\",\"security_type\":\"JWT\"}");
+        assertDoesNotThrow(() -> validator.validate("DEV", "REST", jwtOverHttps, null));
+    }
 }

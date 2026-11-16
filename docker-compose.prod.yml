@@ -25,6 +25,9 @@ services:
       SddP_DB_URL: jdbc:postgresql://postgres:5432/sddp
       SddP_DB_USERNAME: sddp
       SddP_DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a strong unique password}
+      SDDP_OIDC_ENABLED: ${SDDP_OIDC_ENABLED:-false}
+      SDDP_OIDC_ISSUER_URI: ${SDDP_OIDC_ISSUER_URI:-}
+      SDDP_AUDIT_RETENTION_DAYS: ${SDDP_AUDIT_RETENTION_DAYS:-90}
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

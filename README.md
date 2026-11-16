@@ -69,7 +69,7 @@ mvn spring-boot:run
 
 **Default profiles:** `docker` (local), `k8s` (Kubernetes executor).
 
-The application has no built-in authentication. Keep it on a trusted host or network; for remote access, put it behind an authenticated HTTPS gateway and restrict direct access. See the security guidance in [Technical Reference](TECHNICAL.md#security-model).
+Authentication is disabled in the default local profile. For remote access, set both `SDDP_OIDC_ENABLED=true` and `SDDP_OIDC_ISSUER_URI` to enable JWT/OIDC protection, or put the application behind an authenticated HTTPS gateway and restrict direct access. See the security guidance in [Technical Reference](TECHNICAL.md#security-model).
 
 ---
 

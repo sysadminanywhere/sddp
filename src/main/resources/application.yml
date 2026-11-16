@@ -24,4 +24,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
+sddp:
+  audit:
+    retention-days: ${SDDP_AUDIT_RETENTION_DAYS:90}
+  security:
+    oidc:
+      enabled: ${SDDP_OIDC_ENABLED:false}
+      issuer-uri: ${SDDP_OIDC_ISSUER_URI:}

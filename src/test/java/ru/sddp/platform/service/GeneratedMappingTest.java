@@ -16,6 +16,18 @@ import static org.mockito.Mockito.*;
 import org.springframework.web.client.RestClient;
 
 class GeneratedMappingTest {
+    @Test void generatedJwtAdapterRequiresBearerTokenConstructor() throws Exception {
+        var config = new Configuration(Configuration.VERSION_2_3_34);
+        config.setClassLoaderForTemplateLoading(getClass().getClassLoader(), "templates");
+        Template template = config.getTemplate("proxy-adapter.java.ftl");
+        var source = new StringWriter();
+        template.process(Map.of("package_name", "example", "client_name", "JwtClient", "base_url", "https://api.example", "target_endpoint", "/orders", "methods", List.of("send"), "mapping_json", "", "timeout_ms", 5000, "retries", 3, "security_jwt", true), source);
+        String generated = source.toString();
+        assertTrue(generated.contains("String bearerToken"));
+        assertTrue(generated.contains("headers.setBearerAuth(bearerToken)"));
+        assertTrue(generated.contains("Objects.requireNonNull(bearerToken"));
+    }
+
     @Test void generatedAdapterCompilesAndTransformsDocumentedRules() throws Exception {
         var mapper = new ObjectMapper();
         String rules = "{\"transformations\":[{\"type\":\"DIRECT_COPY\",\"from\":\"$.order.id\",\"to\":\"$.transaction_uuid\"},{\"type\":\"CONCATENATE\",\"from\":[\"$.user.first_name\",\"$.user.last_name\"],\"to\":\"$.payment_details.receiver_name\",\"separator\":\" \"},{\"type\":\"HARDCODED_VALUE\",\"value\":\"RUB\",\"to\":\"$.currency\"}]}";
@@ -23,7 +35,7 @@ class GeneratedMappingTest {
         config.setClassLoaderForTemplateLoading(getClass().getClassLoader(), "templates");
         Template template = config.getTemplate("proxy-adapter.java.ftl");
         var source = new StringWriter();
-        template.process(Map.of("package_name", "example", "client_name", "GeneratedClient", "base_url", "http://localhost:8080", "target_endpoint", "/orders", "methods", List.of("send"), "mapping_json", rules, "timeout_ms", 5000, "retries", 3), source);
+        template.process(Map.of("package_name", "example", "client_name", "GeneratedClient", "base_url", "http://localhost:8080", "target_endpoint", "/orders", "methods", List.of("send"), "mapping_json", rules, "timeout_ms", 5000, "retries", 3, "security_jwt", false), source);
         var directory = Files.createTempDirectory("sddp-generated-test-");
         try {
             var javaFile = directory.resolve("GeneratedClient.java");

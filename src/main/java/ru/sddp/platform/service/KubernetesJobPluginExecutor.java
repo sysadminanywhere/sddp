@@ -59,7 +59,7 @@ public class KubernetesJobPluginExecutor implements PluginExecutor {
                     .limits(Map.of("cpu", Quantity.fromString("1"), "memory", Quantity.fromString("512Mi"), "ephemeral-storage", Quantity.fromString("32Mi"))))
                 .securityContext(new V1SecurityContext().allowPrivilegeEscalation(false).readOnlyRootFilesystem(true).capabilities(new V1Capabilities().drop(List.of("ALL"))));
             var pod = new V1PodSpec().restartPolicy("Never").automountServiceAccountToken(false).containers(List.of(container)).volumes(List.of(input, output));
-            var job = new V1Job().metadata(new V1ObjectMeta().name(name)).spec(new V1JobSpec().backoffLimit(0).activeDeadlineSeconds(300L).template(new V1PodTemplateSpec().spec(pod)));
+            var job = new V1Job().metadata(new V1ObjectMeta().name(name).labels(Map.of("app.kubernetes.io/component", "plugin"))).spec(new V1JobSpec().backoffLimit(0).activeDeadlineSeconds(300L).template(new V1PodTemplateSpec().metadata(new V1ObjectMeta().labels(Map.of("app.kubernetes.io/component", "plugin"))).spec(pod)));
             batch.createNamespacedJob(namespace, job).execute(); jobCreated = true;
             Instant deadline = Instant.now().plus(Duration.ofMinutes(6));
             while (Instant.now().isBefore(deadline)) {

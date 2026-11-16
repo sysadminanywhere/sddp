@@ -18,6 +18,9 @@ import java.util.List;
 @Service
 public class ${client_name} {
     private final RestClient restClient;
+    <#if security_jwt>
+    private final String bearerToken;
+    </#if>
     private final CircuitBreaker breaker = CircuitBreaker.of("${client_name}", CircuitBreakerConfig.custom()
             .slidingWindowSize(5).minimumNumberOfCalls(5).failureRateThreshold(100)
             .waitDurationInOpenState(Duration.ofSeconds(30))
@@ -28,7 +31,11 @@ public class ${client_name} {
     private final JsonNode transformations;
     </#if>
     <#if mapping_json?has_content>
+    <#if security_jwt>
+    public ${client_name}(RestClient.Builder builder, ObjectMapper mapper, String bearerToken) {
+    <#else>
     public ${client_name}(RestClient.Builder builder, ObjectMapper mapper) {
+    </#if>
         this.mapper = mapper;
         try {
             this.transformations = mapper.readTree("${mapping_json?j_string}").path("transformations");
@@ -36,7 +43,14 @@ public class ${client_name} {
             throw new IllegalStateException("Invalid generated mapping", e);
         }
     <#else>
+    <#if security_jwt>
+    public ${client_name}(RestClient.Builder builder, String bearerToken) {
+    <#else>
     public ${client_name}(RestClient.Builder builder) {
+    </#if>
+    </#if>
+    <#if security_jwt>
+        this.bearerToken = java.util.Objects.requireNonNull(bearerToken, "bearerToken");
     </#if>
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(${timeout_ms?c});
@@ -52,7 +66,7 @@ public class ${client_name} {
     private Object executeRequest(Object payload) {
         for (int attempt = 0;; attempt++) {
             try {
-                return restClient.post().uri("${target_endpoint}").body(payload).retrieve().body(Object.class);
+                return restClient.post()<#if security_jwt>.headers(headers -> headers.setBearerAuth(bearerToken))</#if>.uri("${target_endpoint}").body(payload).retrieve().body(Object.class);
             } catch (ResourceAccessException e) {
                 if (attempt >= ${retries?c}) throw e;
             }

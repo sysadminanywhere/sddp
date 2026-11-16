@@ -290,7 +290,7 @@ Produces per-connection Java class with:
 - Methods matching IR `methods[]` → `uri(target_endpoint)`
 - Embedded mapping logic (Jackson `ObjectMapper` + transformation rules)
 
-**Limitations**: REST only, REQUEST_RESPONSE only, `security_type=NONE` only. MTLS/JWT → use plugin.
+**Limitations**: REST and `REQUEST_RESPONSE` only. Built-in clients support `security_type=NONE` and `JWT`; JWT clients require `scheme=https`, receive a bearer token through their constructor and never embed it in generated source. MTLS and other security types require a plugin.
 
 ### Plugin Framework
 
@@ -342,16 +342,23 @@ Resolves active executor via `ObjectProvider<PluginExecutor>` — exactly one mu
 
 ## Security Model
 
-- **No authentication/authorization built-in** — designed to run behind reverse proxy (OAuth2/OIDC, mTLS, VPN)
+- **OIDC/JWT resource-server protection is optional** — enabled by `SDDP_OIDC_ISSUER_URI`; otherwise use an authenticated reverse proxy (OAuth2/OIDC, mTLS, VPN)
 - **No PII in database** — only integration metadata
 - **Protected environment mutations** require explicit confirmation (checkbox or header)
 - **Delete guards** prevent orphaned references (HTTP 409)
 - **Plugin isolation**: Docker network=none / K8s readOnlyRootFilesystem + dropped capabilities
 - **Docker socket access** required for Docker executor — treat as root equivalent
+- **Audit trail**: state-changing `/api` requests are recorded with actor (when authenticated), method, path, status and duration; request bodies and credentials are never stored
 
 The API can create, modify and delete projects. Production Compose binds the application to `127.0.0.1` and requires `POSTGRES_PASSWORD`; the PostgreSQL port is not published. For remote access, use an HTTPS gateway on the same host or a private network, authenticate and authorize every request including `/api` and `/actuator`, and block direct access to the application and database. Browser-facing gateways must also mitigate CSRF for state-changing requests. Restrict access to the Docker daemon to trusted administrators; the production Compose example does not mount its socket automatically.
 
+The `metrics` actuator endpoint exposes plugin execution counters and duration. Keep actuator access behind the same authenticated gateway as the API.
+
+Audit events are retained for 90 days by default and expired rows are removed daily at 03:00 server time. Set `SDDP_AUDIT_RETENTION_DAYS` to a positive value appropriate for the organization's retention policy.
+
 The optional Caddy gateway below applies HTTP Basic authentication to every route and rejects state-changing requests unless `Origin` exactly matches the configured HTTPS origin. API clients must supply that header for POST, PUT, PATCH and DELETE. It uses one shared account, not per-user roles, MFA, or audit identity. Allow port 8080 only on the host's loopback interface and never expose the application directly; anyone with local host access can bypass the gateway.
+
+When OIDC is enabled, JWTs must contain a `roles` claim and may contain a `projects` claim. `SDDP_ADMIN` grants access to all projects; other users may access only project UUIDs listed in `projects`. Project creation/import and metrics require `SDDP_ADMIN`. The application disables CSRF for this stateless bearer-token mode; keep it behind TLS.
 
 For a team, prefer an identity-aware gateway backed by an organization's OIDC provider with MFA. The gateway must authenticate every route, remove user-supplied identity headers, authorize requests based on trusted identity and groups, protect state-changing requests against CSRF, and record actor, request, outcome and timestamp without logging credentials or payloads. A gateway alone cannot enforce project-level permissions unless it has project-aware policy; add application-level authorization and audit events before offering per-project roles. The included Basic Auth configuration does not provide these capabilities.
 
@@ -392,7 +399,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
 ```
 
 ### Environment Variables
@@ -406,6 +413,9 @@ management:
 | `SDDP_K8S_NAMESPACE` | `default` | K8s namespace for Jobs |
 | `SDDP_K8S_POLL_SECONDS` | `2` | Job status poll interval in seconds (minimum `0.5`) |
 | `SDDP_MAX_REQUEST_BYTES` | `10000000` | Maximum API request body in bytes, including chunked requests |
+| `SDDP_OIDC_ENABLED` | `false` | Enables JWT authentication and project-level authorization |
+| `SDDP_OIDC_ISSUER_URI` | empty | OIDC issuer URI used by the JWT decoder when OIDC is enabled |
+| `SDDP_AUDIT_RETENTION_DAYS` | `90` | Number of days to retain audit events; cleanup runs daily |
 
 API write requests exceeding the configured limit receive HTTP 413. The limit applies to snapshots, JSON schemas and other API request bodies; increase it deliberately for larger projects. It bounds each request, not the aggregate memory consumed by concurrent requests.
 
@@ -427,6 +437,7 @@ To run a prebuilt image instead, set `IMAGE_NAME` (repository) and `IMAGE_TAG` (
 - `app` (built image) + `postgres:16-alpine`
 - Healthcheck on postgres → `depends_on: condition: service_healthy`
 - Non-root user `sddp:1000` in container
+- OIDC and audit retention are configurable with `SDDP_OIDC_ENABLED`, `SDDP_OIDC_ISSUER_URI` and `SDDP_AUDIT_RETENTION_DAYS`
 
 ### HTTPS gateway (optional)
 
@@ -482,6 +493,7 @@ docker compose -f docker-compose.dev.yml up app
 - Limits: IR under 800 KB (ConfigMap data), plugin output under 5 MB compressed and 10 MB extracted
 - Images are started with `imagePullPolicy: IfNotPresent` and no `imagePullSecrets`; pre-pull them or attach a pull secret to the namespace's `default` service account
 - Apply a NetworkPolicy to restrict plugin pod egress
+- The bundled manifest includes a default-deny egress policy for plugin pods; add narrowly scoped exceptions only for plugins that require network access
 
 ---
 
@@ -565,7 +577,7 @@ frontend/                  # React Flow + dagre source (npm build → static/flo
 |---------|-------|-----|
 | `409 Service is used by N connection(s)` | Delete service with active connections | Delete connections first |
 | `409 Environment PROD is protected` | Mutation without confirmation | Add checkbox or `X-SDDP-Confirm-Protected: true` |
-| Codegen `400 MTLS not supported` | Built-in generator with MTLS connection | Switch to `NONE` or register plugin |
+| Codegen `400 MTLS not supported` | Built-in generator with MTLS connection | Register a plugin; built-in generator supports `NONE` and `JWT` |
 | Graph editor blank | React Flow bundle not built | `cd frontend && npm run build` |
 | Plugin `502` | Container exit≠0 | Check `PluginGenerationException.message` for stderr |
 | Flyway `validate` fails | DB schema mismatch | `mvn flyway:migrate` or clean DB |

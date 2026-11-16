@@ -12,6 +12,9 @@ public class ConnectionValidator {
         if (settings == null || !settings.isObject() || !settings.path("host").isTextual() || settings.path("host").asText().isBlank() || !settings.path("port").isIntegralNumber() || !settings.path("port").canConvertToInt() || settings.path("port").asInt() < 1 || settings.path("port").asInt() > 65535 || !settings.path("target_endpoint").isTextual()) throw new IllegalArgumentException("Connection requires host, port (1-65535), and target_endpoint");
         for (String field : new String[]{"timeout_ms", "retries"}) if (settings.has(field) && (!settings.path(field).isIntegralNumber() || !settings.path(field).canConvertToInt() || settings.path(field).asInt() < 0)) throw new IllegalArgumentException("Invalid " + field);
         if (settings.has("security_type") && (!settings.path("security_type").isTextual() || !Set.of("NONE", "MTLS", "JWT").contains(settings.path("security_type").asText()))) throw new IllegalArgumentException("Invalid security_type");
+        String scheme = settings.path("scheme").asText("http").toLowerCase(java.util.Locale.ROOT);
+        if ("REST".equals(transport) && !Set.of("http", "https").contains(scheme)) throw new IllegalArgumentException("Invalid REST scheme");
+        if ("JWT".equals(settings.path("security_type").asText("NONE")) && !"https".equals(scheme)) throw new IllegalArgumentException("JWT connections require HTTPS");
         if (mapping != null && !mapping.isNull()) validateMapping(mapping);
     }
 
