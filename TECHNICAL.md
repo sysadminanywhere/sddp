@@ -115,7 +115,7 @@ Base path: `/api/v1`
 |--------|----------|-------------|
 | `GET` | `/projects/{id}/environments` | List environments |
 | `POST` | `/projects/{id}/environments` | Create environment |
-| `PUT` | `/projects/{id}/environments/{environmentId}` | Update (rename, protect, position) |
+| `PUT` | `/projects/{id}/environments/{environmentId}` | Update (rename code/name, protect, position) |
 | `DELETE` | `/projects/{id}/environments/{environmentId}` | Delete (409 if connections exist) |
 | `GET` | `/projects/{id}/environments/compare?sourceEnvironment=X&targetEnvironment=Y` | Compare connections |
 | `POST` | `/projects/{id}/connections/copy` | Copy connections `{sourceEnvironment, targetEnvironment, mode: MERGE|REPLACE}` |

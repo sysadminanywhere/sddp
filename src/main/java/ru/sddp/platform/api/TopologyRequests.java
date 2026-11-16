@@ -25,6 +25,6 @@ public final class TopologyRequests {
     public record UpdateConnectionMappingRequest(JsonNode mappingRules) { }
 
     public record CreateEnvironmentRequest(@NotBlank String code, @NotBlank String name, Integer position, Boolean isProtected) { }
-    public record UpdateEnvironmentRequest(@NotBlank String name, Integer position, Boolean isProtected) { }
+    public record UpdateEnvironmentRequest(String code, @NotBlank String name, Integer position, Boolean isProtected) { }
     public record CopyConnectionsRequest(@NotBlank String sourceEnvironment, @NotBlank String targetEnvironment, String mode) { }
 }

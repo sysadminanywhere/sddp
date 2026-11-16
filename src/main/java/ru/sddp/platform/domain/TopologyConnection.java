@@ -40,6 +40,7 @@ public class TopologyConnection {
     public UUID getId() { return id; }
     public Project getProject() { return project; }
     public String getEnvironment() { return environment; }
+    public void renameEnvironment(String environment) { this.environment = environment; this.updatedAt = Instant.now(); }
     public ServiceNode getSource() { return source; }
     public ServiceNode getTarget() { return target; }
     public ServiceApi getSourceApi() { return sourceApi; }

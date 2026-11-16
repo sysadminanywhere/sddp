@@ -74,7 +74,7 @@
     byId('saveEnvironment').textContent = mode === 'create' ? t('project.createEnvironment') : t('project.saveEnvironment');
     byId('cancelEnvironment').href = projectEnvironmentsUrl();
     byId('environmentCode').value = mode === 'create' ? '' : item.code;
-    byId('environmentCode').disabled = mode !== 'create';
+    byId('environmentCode').disabled = false;
     byId('environmentName').value = mode === 'create' ? '' : (item.name || '');
     if (mode === 'create') {
       const max = environments.reduce((acc, env) => Math.max(acc, Number(env.position) || 0), 0);
@@ -158,7 +158,7 @@
         if (mode === 'edit') {
           await api(`${projectBase()}/environments/${encodeURIComponent(environmentId)}`, {
             method: 'PUT',
-            body: { name, position, isProtected },
+            body: { code, name, position, isProtected },
           });
           flash(t('project.environmentSaved', { code }));
         } else {

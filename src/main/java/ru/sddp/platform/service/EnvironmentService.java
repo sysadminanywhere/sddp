@@ -82,11 +82,21 @@ public class EnvironmentService {
     public ApiModels.EnvironmentResponse update(UUID projectId, UUID environmentId,
                                                 TopologyRequests.UpdateEnvironmentRequest request) {
         ProjectEnvironment environment = requireEnvironment(projectId, environmentId);
-        String name = request.name() == null || request.name().isBlank() ? environment.getCode() : request.name().trim();
+        String code = request.code() == null || request.code().isBlank()
+            ? environment.getCode() : normalizeCode(request.code());
+        if (!code.equals(environment.getCode()) && environments.existsByProjectIdAndCode(projectId, code)) {
+            throw new IllegalArgumentException("Environment already exists: " + code);
+        }
+        String name = request.name() == null || request.name().isBlank() ? code : request.name().trim();
         int position = request.position() == null ? environment.getPosition() : request.position();
         boolean isProtected = request.isProtected() == null ? environment.isProtected() : request.isProtected();
-        environment.update(name, position, isProtected);
-        return response(environment, connections.findByProjectIdAndEnvironment(projectId, environment.getCode()).size());
+        String previousCode = environment.getCode();
+        environment.update(code, name, position, isProtected);
+        if (!code.equals(previousCode)) {
+            connections.findByProjectIdAndEnvironment(projectId, previousCode)
+                .forEach(connection -> connection.renameEnvironment(code));
+        }
+        return response(environment, connections.findByProjectIdAndEnvironment(projectId, code).size());
     }
 
     @Transactional

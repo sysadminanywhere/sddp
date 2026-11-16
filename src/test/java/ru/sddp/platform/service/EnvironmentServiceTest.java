@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Test;
 import ru.sddp.platform.api.TopologyRequests;
 import ru.sddp.platform.domain.Project;
 import ru.sddp.platform.domain.ProjectEnvironment;
+import ru.sddp.platform.domain.TopologyConnection;
 import ru.sddp.platform.repository.ProjectEnvironmentRepository;
 import ru.sddp.platform.repository.ProjectRepository;
 import ru.sddp.platform.repository.TopologyConnectionRepository;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -50,5 +52,24 @@ class EnvironmentServiceTest {
     @Test void rejectsInvalidEnvironmentCodes() {
         assertThrows(IllegalArgumentException.class, () -> EnvironmentService.normalizeCode("1-dev"));
         assertEquals("QA_2", EnvironmentService.normalizeCode("qa_2"));
+    }
+
+    @Test void renamesEnvironmentAndItsConnections() {
+        UUID projectId = UUID.randomUUID();
+        UUID environmentId = UUID.randomUUID();
+        Project project = new Project("test");
+        ProjectEnvironment environment = new ProjectEnvironment(project, "QA", "Quality assurance", 40, false);
+        TopologyConnection connection = mock(TopologyConnection.class);
+        when(environments.findByIdAndProjectId(environmentId, projectId)).thenReturn(Optional.of(environment));
+        when(environments.existsByProjectIdAndCode(projectId, "UAT")).thenReturn(false);
+        when(connections.findByProjectIdAndEnvironment(projectId, "QA")).thenReturn(List.of(connection));
+        when(connections.findByProjectIdAndEnvironment(projectId, "UAT")).thenReturn(List.of(connection));
+
+        service.update(projectId, environmentId,
+            new TopologyRequests.UpdateEnvironmentRequest("uat", "User acceptance", 50, true));
+
+        assertEquals("UAT", environment.getCode());
+        assertEquals("User acceptance", environment.getName());
+        verify(connection).renameEnvironment("UAT");
     }
 }

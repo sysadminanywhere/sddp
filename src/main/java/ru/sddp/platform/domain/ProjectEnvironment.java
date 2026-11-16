@@ -33,7 +33,8 @@ public class ProjectEnvironment {
     public boolean isProtected() { return isProtected; }
     public Instant getCreatedAt() { return createdAt; }
 
-    public void update(String name, int position, boolean isProtected) {
+    public void update(String code, String name, int position, boolean isProtected) {
+        this.code = code;
         this.name = name;
         this.position = position;
         this.isProtected = isProtected;
