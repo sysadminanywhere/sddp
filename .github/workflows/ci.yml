@@ -56,13 +56,8 @@ jobs:
           npm run build
           git diff --exit-code -- ../src/main/resources/static/flow/graph.js ../src/main/resources/static/flow/graph.css
 
-      - name: Validate Kubernetes manifest
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'v1.31.0'
-
-      - name: Dry-run Kubernetes manifest validation
-        run: kubectl apply --dry-run=client --validate=true -f deploy/kubernetes.yaml
+      - name: Validate Kubernetes manifest schema without a cluster
+        run: docker run --rm -v "${{ github.workspace }}:/work" -w /work ghcr.io/yannh/kubeconform:v0.6.7 -strict -summary deploy/kubernetes.yaml
 
       - name: Extract Maven version
         id: maven-version
