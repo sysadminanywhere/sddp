@@ -84,6 +84,12 @@
       byId('environmentPosition').value = String(item.position ?? 0);
       byId('environmentProtected').checked = Boolean(item.isProtected);
     }
+    const protectedEdit = byId('protectedEditRow');
+    protectedEdit.hidden = mode !== 'edit' || !item?.isProtected;
+    byId('confirmProtectedEdit').checked = false;
+    if (!protectedEdit.hidden) {
+      byId('confirmProtectedEditText').textContent = t('environment.confirmProtectedRename', { code: item.code });
+    }
     byId('environmentName').focus();
   }
 
@@ -156,9 +162,15 @@
       const isProtected = byId('environmentProtected').checked;
       try {
         if (mode === 'edit') {
+          const renamingProtected = item?.isProtected && code !== item.code;
+          if (renamingProtected && !byId('confirmProtectedEdit').checked) {
+            status(t('environment.confirmRequired'), 'warning');
+            return;
+          }
           await api(`${projectBase()}/environments/${encodeURIComponent(environmentId)}`, {
             method: 'PUT',
             body: { code, name, position, isProtected },
+            headers: renamingProtected ? { 'X-SDDP-Confirm-Protected': 'true' } : {},
           });
           flash(t('project.environmentSaved', { code }));
         } else {

@@ -81,9 +81,19 @@ public class EnvironmentService {
     @Transactional
     public ApiModels.EnvironmentResponse update(UUID projectId, UUID environmentId,
                                                 TopologyRequests.UpdateEnvironmentRequest request) {
+        return update(projectId, environmentId, request, false);
+    }
+
+    @Transactional
+    public ApiModels.EnvironmentResponse update(UUID projectId, UUID environmentId,
+                                                TopologyRequests.UpdateEnvironmentRequest request,
+                                                boolean confirmProtected) {
         ProjectEnvironment environment = requireEnvironment(projectId, environmentId);
         String code = request.code() == null || request.code().isBlank()
             ? environment.getCode() : normalizeCode(request.code());
+        if (environment.isProtected() && !code.equals(environment.getCode()) && !confirmProtected) {
+            throw protectedError(environment.getCode());
+        }
         if (!code.equals(environment.getCode()) && environments.existsByProjectIdAndCode(projectId, code)) {
             throw new IllegalArgumentException("Environment already exists: " + code);
         }

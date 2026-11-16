@@ -72,4 +72,19 @@ class EnvironmentServiceTest {
         assertEquals("User acceptance", environment.getName());
         verify(connection).renameEnvironment("UAT");
     }
+
+    @Test void protectedEnvironmentRenameRequiresConfirmation() {
+        UUID projectId = UUID.randomUUID();
+        UUID environmentId = UUID.randomUUID();
+        ProjectEnvironment environment = new ProjectEnvironment(new Project("test"), "PROD", "Production", 30, true);
+        when(environments.findByIdAndProjectId(environmentId, projectId)).thenReturn(Optional.of(environment));
+        when(connections.findByProjectIdAndEnvironment(projectId, "PROD")).thenReturn(List.of());
+        when(connections.findByProjectIdAndEnvironment(projectId, "LIVE")).thenReturn(List.of());
+
+        var request = new TopologyRequests.UpdateEnvironmentRequest("LIVE", "Live", 30, true);
+        assertThrows(ProtectedEnvironmentException.class,
+            () -> service.update(projectId, environmentId, request, false));
+        service.update(projectId, environmentId, request, true);
+        assertEquals("LIVE", environment.getCode());
+    }
 }

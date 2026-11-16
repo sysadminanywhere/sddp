@@ -38,8 +38,10 @@ public class EnvironmentController {
 
     @PutMapping("/environments/{environmentId}")
     public ApiModels.EnvironmentResponse update(@PathVariable UUID projectId, @PathVariable UUID environmentId,
-                                                @Valid @RequestBody TopologyRequests.UpdateEnvironmentRequest request) {
-        return environments.update(projectId, environmentId, request);
+                                                @Valid @RequestBody TopologyRequests.UpdateEnvironmentRequest request,
+                                                @RequestHeader(value = EnvironmentService.CONFIRM_HEADER, defaultValue = "false")
+                                                boolean confirmProtected) {
+        return environments.update(projectId, environmentId, request, confirmProtected);
     }
 
     @DeleteMapping("/environments/{environmentId}") @ResponseStatus(HttpStatus.NO_CONTENT)

@@ -52,6 +52,10 @@
           </label>
         </div>
         <p class="hint" data-i18n="project.environmentFormHint">Changing the code renames the environment in its connections. Connection changes in a protected environment require confirmation.</p>
+        <label id="protectedEditRow" class="inline" hidden>
+          <input id="confirmProtectedEdit" type="checkbox">
+          <span id="confirmProtectedEditText"></span>
+        </label>
         <div class="button-row">
           <button id="saveEnvironment" type="submit" data-i18n="project.createEnvironment">Create environment</button>
           <a id="cancelEnvironment" class="button-link secondary" href="#" data-i18n="common.cancel">Cancel</a>
