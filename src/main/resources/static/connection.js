@@ -131,11 +131,12 @@
     fillApiSelect(byId('sourceApi'), byId('sourceService').value, connection?.sourceApiId || '', t('project.noSourceApiOption'));
     fillApiSelect(byId('targetApi'), byId('targetService').value, connection?.targetApiId || '', null);
 
+    byId('endpoint').defaultValue = apiById(byId('targetApi').value)?.httpOperation?.path || '/';
     if (mode === 'create') {
       byId('transport').value = 'REST';
       byId('host').value = 'localhost';
       byId('port').value = '8080';
-      byId('endpoint').value = '/';
+      byId('endpoint').value = byId('endpoint').defaultValue;
       byId('timeout').value = '5000';
       byId('retries').value = '3';
       byId('security').value = 'NONE';
@@ -145,7 +146,7 @@
       byId('transport').value = connection.transportType;
       byId('host').value = settings.host ?? 'localhost';
       byId('port').value = settings.port ?? 8080;
-      byId('endpoint').value = settings.target_endpoint ?? '/';
+      byId('endpoint').value = settings.target_endpoint ?? apiById(byId('targetApi').value)?.httpOperation?.path ?? '/';
       byId('timeout').value = settings.timeout_ms ?? 5000;
       byId('retries').value = settings.retries ?? 3;
       byId('security').value = settings.security_type ?? 'NONE';
@@ -412,6 +413,17 @@
     }
   }
 
+  function updateTargetMapping() {
+    const target = apiById(byId('targetApi').value);
+    if (byId('transport').value === 'REST') {
+      const endpoint = byId('endpoint');
+      const replace = !endpoint.value.trim() || endpoint.value === endpoint.defaultValue;
+      endpoint.defaultValue = target?.httpOperation?.path || '/';
+      if (replace) endpoint.value = endpoint.defaultValue;
+    }
+    renderMappingRules();
+  }
+
   function bindEvents() {
     bindJsonToggles();
     byId('sourceService').addEventListener('change', () => {
@@ -420,10 +432,10 @@
     });
     byId('targetService').addEventListener('change', () => {
       fillApiSelect(byId('targetApi'), byId('targetService').value, '', null);
-      renderMappingRules();
+      updateTargetMapping();
     });
     byId('sourceApi').addEventListener('change', renderMappingRules);
-    byId('targetApi').addEventListener('change', renderMappingRules);
+    byId('targetApi').addEventListener('change', updateTargetMapping);
     byId('addMappingRule').addEventListener('click', () => {
       mappingRules.push({ type: 'DIRECT_COPY', from: '', to: '', separator: ' ', value: '' });
       renderMappingRules();

@@ -154,7 +154,7 @@ public class ServiceCatalogService {
         }
         ServiceApi next = apis.save(new ServiceApi(service, current.getName(), request.version().trim(),
             normalizeDescription(request.description() == null ? current.getDescription() : request.description()),
-            request.pattern(), request.requestSchema(), normalizeSchema(request.responseSchema())));
+            request.pattern(), request.requestSchema(), normalizeSchema(request.responseSchema()), current.getHttpOperation()));
         return apiResponse(next);
     }
 
@@ -178,7 +178,7 @@ public class ServiceCatalogService {
 
     private ApiModels.ServiceApiResponse apiResponse(ServiceApi api) {
         return new ApiModels.ServiceApiResponse(api.getId(), api.getService().getId(), api.getName(), api.getVersion(),
-            api.getDescription(), api.getPattern().name(), api.getRequestSchema(), api.getResponseSchema(), api.getCreatedAt());
+            api.getDescription(), api.getPattern().name(), api.getRequestSchema(), api.getResponseSchema(), api.getCreatedAt(), api.getHttpOperation());
     }
 
     private JsonNode normalizeSchema(JsonNode schema) {

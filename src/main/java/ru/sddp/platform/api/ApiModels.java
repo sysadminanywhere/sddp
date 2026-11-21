@@ -1,6 +1,7 @@
 package ru.sddp.platform.api;
 
 import tools.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 import java.util.*;
@@ -13,7 +14,8 @@ public final class ApiModels {
 
     public record ServiceResponse(UUID id, String name, String serviceType, String description, Instant createdAt, long apiCount, Integer positionX, Integer positionY) { }
     public record ServiceApiResponse(UUID id, UUID serviceId, String name, String version, String description,
-                                     String pattern, JsonNode requestSchema, JsonNode responseSchema, Instant createdAt) { }
+                                     String pattern, JsonNode requestSchema, JsonNode responseSchema, Instant createdAt,
+                                     @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation httpOperation) { }
 
     public record EnvironmentResponse(UUID id, UUID projectId, String code, String name, int position,
                                       boolean isProtected, long connectionCount) { }
@@ -35,5 +37,10 @@ public final class ApiModels {
     public record IrManifest(String system_name, String environment, Instant generated_at, List<IrService> services) { }
     public record IrService(String service_name, boolean is_external, List<IrConnection> outbound_connections) { }
     public record IrConnection(String client_name, String target_service_name, String transport_type, JsonNode connection_settings, List<IrMethod> methods, @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) JsonNode mapping_rules) { }
-    public record IrMethod(String method_name, String pattern, JsonNode request_schema, JsonNode response_schema) { }
+    public record IrMethod(String method_name, String pattern, JsonNode request_schema, JsonNode response_schema,
+                           @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation http_operation) {
+        public IrMethod(String name, String pattern, JsonNode request, JsonNode response) {
+            this(name, pattern, request, response, null);
+        }
+    }
 }

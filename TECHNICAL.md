@@ -99,6 +99,8 @@ Base path: `/api/v1`
 | `PUT` | `/projects/{id}/services/{serviceId}/apis/{apiId}` | Update API |
 | `DELETE` | `/projects/{id}/services/{serviceId}/apis/{apiId}` | Delete (409 if used in connections) |
 | `POST` | `/projects/{id}/services/{serviceId}/apis/{apiId}/versions` | Create new version (backward-compatible) |
+| `POST` | `/projects/{id}/services/{serviceId}/apis/openapi/preview` | Inspect `{document}` and list operations and warnings |
+| `POST` | `/projects/{id}/services/{serviceId}/apis/openapi/import` | Import `{document, operations}` using the operation keys from preview |
 
 ### Connections
 
@@ -130,6 +132,14 @@ Base path: `/api/v1`
 | `POST` | `/projects/{id}/snapshot?environment=ENV` | Export Snapshot v1 (all envs if omitted) |
 
 ### Code Generation
+
+### OpenAPI pilot
+
+Open a service, expand **Import OpenAPI**, choose the [orders contract](docs/examples/orders.openapi.json), and preview the operations. Select the operations to add and confirm the import. The import uses `info.version` as the API version and preserves any existing operation with the same name and version.
+
+The importer reads OpenAPI 3.0 and 3.1 JSON, expands local references, and supports JSON bodies, scalar path and query parameters with default serialization, and the first declared successful JSON response by status code. Preview reports unsupported operations. External references, recursive schemas and YAML input are outside the current import subset. Configure host, port, and security on the connection for each environment.
+
+Imported REST methods carry `http_operation` in the IR. Its method, path, body flags, and declared parameters are preserved by snapshot v1. The client uses the contract path when the connection endpoint is `/`. A customized endpoint must keep the same path placeholders. Generated methods take maps for the declared path and query parameters and a Java object when the operation accepts a JSON body. Mapping rules apply to the JSON body. Existing connections without this metadata continue to send POST.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -275,6 +285,14 @@ Each environment includes its code, display name, order and protection flag. Ser
 
 ## Code Generation
 
+### OpenAPI pilot
+
+Open a service, expand **Import OpenAPI**, choose the [orders contract](docs/examples/orders.openapi.json), and preview the operations. Select the operations to add and confirm the import. The import uses `info.version` as the API version and preserves any existing operation with the same name and version.
+
+The importer reads OpenAPI 3.0 and 3.1 JSON, expands local references, and supports JSON bodies, scalar path and query parameters with default serialization, and the first declared successful JSON response by status code. Preview reports unsupported operations. External references, recursive schemas and YAML input are outside the current import subset. Configure host, port, and security on the connection for each environment.
+
+Imported REST methods carry `http_operation` in the IR. Its method, path, body flags, and declared parameters are preserved by snapshot v1. The client uses the contract path when the connection endpoint is `/`. A customized endpoint must keep the same path placeholders. Generated methods take maps for the declared path and query parameters and a Java object when the operation accepts a JSON body. Mapping rules apply to the JSON body. Existing connections without this metadata continue to send POST.
+
 ### Built-in Generator (FreeMarker)
 
 Template: `src/main/resources/templates/proxy-adapter.java.ftl`
@@ -284,7 +302,7 @@ Produces per-connection Java class with:
 - `RestClient` with connect/read timeouts from `connection_settings`
 - Retry loop (`retries` times on `ResourceAccessException`)
 - Resilience4j `CircuitBreaker` (sliding window 5, 100% failure threshold, 30s open)
-- Methods matching IR `methods[]` send HTTP `POST` requests to `target_endpoint`
+- Methods matching IR `methods[]` use the imported HTTP method when present and POST for existing connections without HTTP metadata
 - Embedded mapping logic (Jackson `ObjectMapper` + transformation rules)
 
 The built-in generator supports REST `REQUEST_RESPONSE` connections and `security_type=NONE` or `JWT`. For JWT, set `connectionSettings.scheme=https` via the topology API or a snapshot. The generated constructor accepts the bearer token at runtime. mTLS and other transports require a registered plugin.
@@ -364,13 +382,13 @@ For a team, prefer an identity-aware gateway backed by an organization's OIDC pr
 
 ## Database Schema
 
-Tables (Flyway migrations V1–V6):
+Tables (Flyway migrations V1–V7):
 
 | Table | Purpose |
 |-------|---------|
 | `projects` | Project metadata |
 | `services` | Service nodes + positions |
-| `service_apis` | API operations + JSON schemas |
+| `service_apis` | API operations, JSON schemas, and optional HTTP metadata |
 | `project_environments` | Environment definitions |
 | `topology_connections` | Connections per environment + settings + mapping |
 | `codegen_plugins` | Registered plugin descriptors |
@@ -552,7 +570,7 @@ src/
 │   │   ├── service/       # Business logic
 │   │   └── web/           # REST controllers
 │   └── resources/
-│       ├── db/migration/  # Flyway V1–V6
+│       ├── db/migration/  # Flyway V1–V7
 │       ├── static/        # HTML/JS/CSS (served as-is)
 │       └── templates/     # FreeMarker codegen templates
 └── test/                  # Unit + integration tests

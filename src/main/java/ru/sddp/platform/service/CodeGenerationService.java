@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Service;
 import ru.sddp.platform.api.*;
 import java.io.StringWriter;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Service
@@ -57,9 +58,26 @@ public class CodeGenerationService {
             if ("JWT".equals(security) && !"https".equals(scheme)) throw new IllegalArgumentException("JWT clients require HTTPS");
             String host = settings.path("host").asText();
             String endpoint = settings.path("target_endpoint").asText();
-            if (!host.matches("[A-Za-z0-9.:-]+") || !endpoint.matches("/[A-Za-z0-9_./~%-]*") || settings.path("port").asInt() < 1 || settings.path("port").asInt() > 65535) throw new IllegalArgumentException("Invalid REST host, port or endpoint");
+            if (!host.matches("[A-Za-z0-9.:-]+") || settings.path("port").asInt() < 1 || settings.path("port").asInt() > 65535) {
+                throw new IllegalArgumentException("Invalid REST host or port");
+            }
+            HttpOperation http = connection.methods().getFirst().http_operation();
+            if (http == null && !endpoint.matches("/[A-Za-z0-9_./~%-]*")) {
+                throw new IllegalArgumentException("Invalid REST endpoint");
+            }
+            if (http != null) {
+                endpoint = "/".equals(endpoint) ? http.path() : endpoint;
+                if (!HttpOperation.placeholders(endpoint).equals(HttpOperation.placeholders(http.path()))) {
+                    throw new IllegalArgumentException("REST endpoint parameters do not match the imported contract");
+                }
+            }
             String mapping = connection.mapping_rules() == null || connection.mapping_rules().isNull() ? "" : connection.mapping_rules().toString();
-            template.process(Map.of("package_name", request.packageName(), "client_name", className, "base_url", scheme + "://" + host + ":" + settings.path("port").asInt(), "target_endpoint", endpoint, "methods", methods, "mapping_json", mapping, "timeout_ms", timeout, "retries", retries, "security_jwt", "JWT".equals(security)), writer);
+            var model = new LinkedHashMap<String, Object>(Map.of("package_name", request.packageName(),
+                "client_name", className, "base_url", scheme + "://" + host + ":" + settings.path("port").asInt(),
+                "target_endpoint", endpoint, "methods", methods, "mapping_json", mapping,
+                "timeout_ms", timeout, "retries", retries, "security_jwt", "JWT".equals(security)));
+            if (http != null) model.put("http", httpTemplateModel(http));
+            template.process(model, writer);
             files.put(className + ".java", writer.toString());
             }
             var first = files.entrySet().iterator().next();
@@ -67,6 +85,15 @@ public class CodeGenerationService {
             events.publish("CODEGEN_COMPLETED", manifest);
             return result;
         } catch (java.io.IOException | TemplateException e) { throw new IllegalStateException("Code generation failed", e); }
+    }
+
+    private Map<String, Object> httpTemplateModel(HttpOperation http) {
+        var path = http.parameters().stream().filter(parameter -> "path".equals(parameter.in()))
+            .map(parameter -> Map.of("name", parameter.name(), "required", parameter.required())).toList();
+        var query = http.parameters().stream().filter(parameter -> "query".equals(parameter.in()))
+            .map(parameter -> Map.of("name", parameter.name(), "required", parameter.required())).toList();
+        return Map.of("method", http.method(), "hasBody", http.requestBody(), "bodyRequired", http.bodyRequired(),
+            "pathParameters", path, "queryParameters", query);
     }
 
     private CodegenModels.PluginExecutionResult executePlugin(PluginExecutor executor, ApiModels.IrManifest manifest,

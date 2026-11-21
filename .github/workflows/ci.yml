@@ -83,7 +83,7 @@ jobs:
           SddP_DB_USERNAME: sddp
           SddP_DB_PASSWORD: sddp
 
-      - name: Verify snapshot against PostgreSQL and Flyway migrations
+      - name: Verify snapshots and the OpenAPI pilot against PostgreSQL
         run: mvn -B -Dtest=SnapshotPostgresIntegrationTest test
         env:
           SDDP_POSTGRES_IT: "true"
