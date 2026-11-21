@@ -81,13 +81,7 @@ async page => {
     expect(reloaded?.positionX === saved.positionX && reloaded?.positionY === saved.positionY,
       'Graph position did not survive reload');
   }
-  const edge = page.locator('.react-flow__edge-interaction');
-  const center = await edge.evaluate(path => {
-    const point = path.getPointAtLength(path.getTotalLength() / 2);
-    const { x, y } = point.matrixTransform(path.getScreenCTM());
-    return { x, y };
-  });
-  await page.mouse.click(center.x, center.y);
+  await page.locator('#issueList').getByRole('button').filter({ hasText: '$.productCode' }).click();
   await page.locator('#selectedConnection').getByRole('link', { name: 'Edit' }).click();
 
   await page.locator('#endpoint').waitFor();
