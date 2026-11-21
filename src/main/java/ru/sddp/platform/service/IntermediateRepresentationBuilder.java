@@ -49,7 +49,8 @@ public class IntermediateRepresentationBuilder {
         ServiceApi targetApi = c.getTargetApi();
         if (targetApi == null) throw new IllegalArgumentException("Connection " + c.getId() + " has no target API");
         var method = new ApiModels.IrMethod(targetApi.getName(), targetApi.getPattern().name(),
-            targetApi.getRequestSchema(), targetApi.getResponseSchema() == null ? mapper.createObjectNode() : targetApi.getResponseSchema());
+            targetApi.getRequestSchema(), targetApi.getResponseSchema() == null ? mapper.createObjectNode() : targetApi.getResponseSchema(),
+            "REST".equals(c.getTransportType()) ? targetApi.getHttpOperation() : null);
         return new ApiModels.IrConnection(c.getSource().getName(), c.getTarget().getName(), c.getTransportType(), settings, List.of(method), c.getMappingRules());
     }
 

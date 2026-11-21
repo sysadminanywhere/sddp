@@ -31,7 +31,17 @@ async page => {
     requestSchema: { type: 'object', properties: { [field]: { type: 'string' } }, required: [field] }
   });
   const sourceApi = await addApi(source, 'sendOrder', 'orderId');
-  const targetApi = await addApi(target, 'receiveOrder', 'externalId');
+  await page.goto(url('/service.html?projectId=' + project.id + '&serviceId=' + target.id));
+  await page.getByText('Import OpenAPI', { exact: true }).click();
+  await page.getByRole('button', { name: 'OpenAPI JSON file' }).setInputFiles('docs/examples/orders.openapi.json');
+  await page.getByRole('button', { name: 'Preview operations' }).click();
+  await page.getByRole('checkbox', { name: 'GET /orders/{id} · getOrder' }).waitFor();
+  await page.getByRole('checkbox', { name: 'POST /orders · createOrder' }).waitFor();
+  await page.getByRole('button', { name: 'Import selected operations' }).click();
+  await page.getByRole('link', { name: 'createOrder', exact: true }).waitFor();
+  const targetApis = await receiveJson(await page.request.get(url(base + '/services/' + target.id + '/apis')));
+  const targetApi = targetApis.find(operation => operation.name === 'createOrder');
+  expect(targetApi?.httpOperation?.method === 'POST' && targetApis.length === 2, 'OpenAPI import did not preserve both operations');
 
   const graphUrl = url('/graph.html?projectId=' + project.id + '&environment=DEV');
   await page.goto(graphUrl);
@@ -47,6 +57,7 @@ async page => {
   const dialog = page.getByRole('dialog', { name: 'New connection' });
   await dialog.locator('#connectSourceApi').selectOption(sourceApi.id);
   await dialog.locator('#connectTargetApi').selectOption(targetApi.id);
+  expect(await dialog.locator('#connectEndpoint').inputValue() === '/orders', 'Imported path was not suggested');
   const connectionCreated = page.waitForResponse(response =>
     new URL(response.url()).pathname === base + '/connections' && response.request().method() === 'POST'
   );
@@ -79,10 +90,10 @@ async page => {
   await page.mouse.click(center.x, center.y);
   await page.locator('#selectedConnection').getByRole('link', { name: 'Edit' }).click();
 
-  await page.locator('#endpoint').fill('/orders');
+  await page.locator('#endpoint').waitFor();
   await page.locator('#addMappingRule').click();
   await page.locator('.mapping-source select').selectOption('$.orderId');
-  await page.locator('.mapping-rule > select').last().selectOption('$.externalId');
+  await page.locator('.mapping-rule > select').last().selectOption('$.productCode');
   const edited = page.waitForResponse(response =>
     new URL(response.url()).pathname.startsWith(base + '/connections/') && response.request().method() === 'PUT'
   );
@@ -122,7 +133,7 @@ async page => {
   await page.getByRole('button', { name: 'Generate', exact: true }).click();
   const result = await receiveJson(await generated);
   const java = result.files['GeneratedClient.java'];
-  expect(java?.includes('/orders') && java.includes('$.externalId') && java.includes('$.orderId'),
+  expect(java?.includes('/orders') && java.includes('$.productCode') && java.includes('$.orderId'),
     'The generated client did not use the promoted endpoint and mapping');
   await page.locator('#codegenResult').getByText('GeneratedClient.java', { exact: true }).waitFor();
   return 'SDDP browser release check passed';

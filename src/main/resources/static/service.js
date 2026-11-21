@@ -11,6 +11,7 @@
   let service = null;
   let apis = [];
   let topology = { nodes: [], edges: [] };
+  let openApiDocument = null;
 
   function nodeName(id) {
     return topology.nodes.find(node => node.id === id)?.name || id;
@@ -53,6 +54,10 @@
     byId('breadcrumbProject').href = projectUrl();
     byId('breadcrumbService').textContent = service.name;
     byId('newApi').href = apiUrl(serviceId, null, 'create');
+    const openApiUrl = projectBase() + '/services/' + encodeURIComponent(serviceId) + '/apis/openapi';
+    byId('openApiPreviewForm').action = openApiUrl + '/preview';
+    byId('openApiImportForm').action = openApiUrl + '/import';
+    byId('openApiPanel').hidden = false;
     document.title = `${service.name} · ${project?.name || t('service.breadcrumbProject')} · SDDP`;
   }
 
@@ -70,7 +75,7 @@
         <header>
           <div>
             <h3><a class="api-title-link" href="${viewUrl}">${esc(item.name)}</a> <span class="badge accent">v${esc(item.version)}</span></h3>
-            <small>${esc(item.pattern)} · request: ${fieldCount(item.requestSchema)} · response: ${fieldCount(item.responseSchema)}</small>
+            <small>${esc(item.httpOperation ? `${item.httpOperation.method} ${item.httpOperation.path}` : item.pattern)} · request: ${fieldCount(item.requestSchema)} · response: ${fieldCount(item.responseSchema)}</small>
           </div>
           <div class="button-row">
             <a class="button-link secondary" href="${viewUrl}">${t('service.open')}</a>
@@ -128,7 +133,102 @@
     }
   }
 
+  function resetOpenApiPreview() {
+    openApiDocument = null;
+    byId('openApiImportForm').hidden = true;
+    byId('openApiWarnings').hidden = true;
+    byId('openApiStatus').textContent = '';
+  }
+
+  function renderOpenApiPreview(preview) {
+    const warnings = byId('openApiWarnings');
+    warnings.replaceChildren(...preview.warnings.map(warning => {
+      const item = document.createElement('li');
+      item.textContent = warning;
+      return item;
+    }));
+    warnings.hidden = preview.warnings.length === 0;
+    byId('openApiStatus').textContent = t('openapi.previewResult', {
+      version: preview.version, count: preview.operations.length,
+    });
+    byId('openApiOperations').replaceChildren(...preview.operations.map((operation, index) => {
+      const row = document.createElement('div');
+      const checkbox = document.createElement('input');
+      const label = document.createElement('label');
+      checkbox.type = 'checkbox';
+      checkbox.name = 'operations';
+      checkbox.id = 'openapi-operation-' + index;
+      checkbox.value = operation.key;
+      checkbox.checked = !operation.exists;
+      label.htmlFor = checkbox.id;
+      label.textContent = operation.method + ' ' + operation.path + ' · ' + operation.name
+        + (operation.exists ? ' · ' + t('openapi.existing') : '');
+      row.className = 'button-row';
+      row.append(checkbox, label);
+      return row;
+    }));
+    byId('openApiImportForm').hidden = preview.operations.length === 0;
+  }
+
+  function bindOpenApi() {
+    const fileInput = byId('openApiFile');
+    fileInput.addEventListener('change', resetOpenApiPreview);
+    byId('openApiPreviewForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const file = fileInput.files[0];
+      const button = byId('openApiPreview');
+      resetOpenApiPreview();
+      button.disabled = true;
+      try {
+        let document;
+        try {
+          document = JSON.parse(await file.text());
+        } catch {
+          throw new Error(t('openapi.invalidFile'));
+        }
+        const preview = await api(new URL(form.action).pathname, { method: 'POST', body: { document } });
+        if (fileInput.files[0] !== file) return;
+        openApiDocument = document;
+        renderOpenApiPreview(preview);
+      } catch (error) {
+        if (fileInput.files[0] === file) byId('openApiStatus').textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    byId('openApiImportForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const operations = new FormData(form).getAll('operations');
+      if (!openApiDocument || operations.length === 0) {
+        byId('openApiStatus').textContent = t('openapi.selectOperation');
+        return;
+      }
+      const button = byId('openApiImport');
+      button.disabled = true;
+      fileInput.disabled = true;
+      try {
+        const result = await api(new URL(form.action).pathname, {
+          method: 'POST', body: { document: openApiDocument, operations },
+        });
+        resetOpenApiPreview();
+        byId('openApiStatus').textContent = t('openapi.importResult', {
+          created: result.created.length, existing: result.existing.length,
+        });
+        await load();
+      } catch (error) {
+        byId('openApiStatus').textContent = error.message;
+      } finally {
+        button.disabled = false;
+        fileInput.disabled = false;
+      }
+    });
+  }
+
   function bindEvents() {
+    bindOpenApi();
     byId('reloadService').addEventListener('click', load);
     byId('serviceForm').addEventListener('submit', async event => {
       event.preventDefault();

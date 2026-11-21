@@ -243,7 +243,8 @@
     fillApiSelect(byId('connectSourceApi'), source.id, t('project.noSourceApiOption'));
     fillApiSelect(byId('connectTargetApi'), target.id, null);
     byId('connectTransport').value = 'REST';
-    byId('connectEndpoint').value = '/';
+    byId('connectEndpoint').value = '';
+    suggestEndpoint();
     byId('connectError').hidden = true;
     byId('connectError').textContent = '';
     const protectedRow = byId('connectProtectedRow');
@@ -261,11 +262,21 @@
     byId('connectTargetApi').focus();
   }
 
+  function suggestEndpoint() {
+    const target = apiById(byId('connectTargetApi').value);
+    const endpoint = byId('connectEndpoint');
+    const replace = !endpoint.value.trim() || endpoint.value === endpoint.defaultValue;
+    endpoint.defaultValue = byId('connectTransport').value === 'REST' ? target?.httpOperation?.path || '/' : '/';
+    if (replace) endpoint.value = endpoint.defaultValue;
+  }
+
   function closeConnectDialog() {
     byId('connectOverlay').hidden = true;
   }
 
   function bindDialogEvents() {
+    byId('connectTargetApi').addEventListener('change', suggestEndpoint);
+    byId('connectTransport').addEventListener('change', suggestEndpoint);
     byId('connectCancel').addEventListener('click', closeConnectDialog);
     byId('connectOverlay').addEventListener('click', event => {
       if (event.target === byId('connectOverlay')) closeConnectDialog();

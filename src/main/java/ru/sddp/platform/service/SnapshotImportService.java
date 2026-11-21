@@ -4,6 +4,7 @@ import tools.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.sddp.platform.api.ApiModels;
+import ru.sddp.platform.api.HttpOperation;
 import ru.sddp.platform.domain.*;
 import ru.sddp.platform.repository.*;
 import java.util.*;
@@ -77,8 +78,12 @@ public class SnapshotImportService {
             schemaValidator.validate(requiredSchema(api, "requestSchema"));
             JsonNode response = optionalSchema(api, "responseSchema");
             if (response != null) schemaValidator.validate(response);
+            HttpOperation http = HttpOperation.fromSnapshot(api.path("httpOperation"));
+            if (http != null && pattern != ApiPattern.REQUEST_RESPONSE) {
+                throw new IllegalArgumentException("HTTP metadata requires a request-response API");
+            }
             apiMap.put(id, apis.save(new ServiceApi(service, requiredText(api, "name"), requiredText(api, "version"),
-                optionalText(api, "description"), pattern, requiredSchema(api, "requestSchema"), response)));
+                optionalText(api, "description"), pattern, requiredSchema(api, "requestSchema"), response, http)));
         }
 
         for (JsonNode connection : requiredArray(root, "connections")) {

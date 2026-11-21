@@ -1,6 +1,7 @@
 package ru.sddp.platform.domain;
 
 import tools.jackson.databind.JsonNode;
+import ru.sddp.platform.api.HttpOperation;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -18,12 +19,19 @@ public class ServiceApi {
     @Enumerated(EnumType.STRING) @Column(nullable = false) private ApiPattern pattern;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "request_schema", nullable = false, columnDefinition = "jsonb") private JsonNode requestSchema;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "response_schema", columnDefinition = "jsonb") private JsonNode responseSchema;
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "http_operation", columnDefinition = "jsonb") private HttpOperation httpOperation;
     @Column(name = "created_at", nullable = false) private Instant createdAt = Instant.now();
 
     protected ServiceApi() { }
 
     public ServiceApi(ServiceNode service, String name, String version, String description, ApiPattern pattern,
                       JsonNode requestSchema, JsonNode responseSchema) {
+        this(service, name, version, description, pattern, requestSchema, responseSchema, null);
+    }
+
+    public ServiceApi(ServiceNode service, String name, String version, String description, ApiPattern pattern,
+                      JsonNode requestSchema, JsonNode responseSchema, HttpOperation httpOperation) {
+        this.httpOperation = httpOperation;
         this.service = service;
         this.name = name;
         this.version = version;
@@ -52,5 +60,6 @@ public class ServiceApi {
     public ApiPattern getPattern() { return pattern; }
     public JsonNode getRequestSchema() { return requestSchema; }
     public JsonNode getResponseSchema() { return responseSchema; }
+    public HttpOperation getHttpOperation() { return httpOperation; }
     public Instant getCreatedAt() { return createdAt; }
 }

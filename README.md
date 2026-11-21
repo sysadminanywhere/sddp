@@ -24,6 +24,7 @@ SDDP is an MIT-licensed platform for **spec-driven integration development**. De
 - Services with typed APIs (REQUEST_RESPONSE / PUB_SUB)
 - JSON Schema for request/response with field tree editor
 - Field-level mapping between source and target APIs (DIRECT_COPY, HARDCODED_VALUE, CONCATENATE)
+- Preview and import selected operations from an OpenAPI 3.0 or 3.1 JSON file into an existing service
 
 ### 🌍 **Multi-Environment Topology**
 - Isolated connection sets per environment (DEV, STAGE, PROD, custom)
@@ -45,7 +46,7 @@ SDDP is an MIT-licensed platform for **spec-driven integration development**. De
 - Versioned JSON for backing up, sharing, and seeding project topology. Import creates a new project.
 
 ### ⚡ **Code Generation**
-- **Built-in**: Java 21, Spring `RestClient` and Resilience4j for REST `REQUEST_RESPONSE` connections using HTTP `POST`
+- **Built-in**: Java 21, Spring `RestClient` and Resilience4j for REST `REQUEST_RESPONSE` connections. Imported operations carry the HTTP method and scalar path and query parameters. Existing manual connections default to HTTP `POST`.
 - **Extensible**: Docker and Kubernetes executors run registered plugins. gRPC, Kafka, and RabbitMQ are available in the topology model and require a plugin for code generation.
 - Generated code includes: timeouts, base URLs, embedded mapping logic, circuit breaker config
 
@@ -199,7 +200,11 @@ Each plugin Job has limits of 1 CPU, 512 MiB memory and 32 MiB ephemeral storage
 
 ---
 
-## Features in 0.1.0
+## Project status
+
+The current development version is `0.2.0-SNAPSHOT`. The OpenAPI pilot uses the [orders example](docs/examples/orders.openapi.json). The latest published version is [0.1.0](https://github.com/sysadminanywhere/sddp/releases/tag/v0.1.0).
+
+### Core features
 - ✅ Project creation, viewing, listing, and deletion, plus CRUD for services, API operations, connections, and environments
 - ✅ Graph editor with validation & persistence
 - ✅ Environment comparison & promotion

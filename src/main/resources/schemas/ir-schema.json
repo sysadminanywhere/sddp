@@ -44,7 +44,29 @@
                       "method_name": { "type": "string" },
                       "pattern": { "type": "string", "enum": ["REQUEST_RESPONSE", "PUB_SUB"] },
                       "request_schema": { "type": "object" },
-                      "response_schema": { "type": "object" }
+                      "response_schema": { "type": "object" },
+                      "http_operation": {
+                        "type": "object",
+                        "required": ["method", "path", "requestBody", "bodyRequired", "parameters"],
+                        "properties": {
+                          "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
+                          "path": { "type": "string", "pattern": "^/" },
+                          "requestBody": { "type": "boolean" },
+                          "bodyRequired": { "type": "boolean" },
+                          "parameters": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": ["name", "in", "required"],
+                              "properties": {
+                                "name": { "type": "string" },
+                                "in": { "enum": ["path", "query"] },
+                                "required": { "type": "boolean" }
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }
