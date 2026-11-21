@@ -53,7 +53,12 @@ fi
 if [[ "${SDDP_TEST_BROWSER:-0}" == 1 ]]; then
   browser_started=1
   "${browser[@]}" --config scripts/playwright-gateway.json open --browser="${SDDP_TEST_BROWSER_CHANNEL:-chrome}" https://localhost:18443/
-  "${browser[@]}" run-code 'async page => { await page.getByRole("textbox", {name:"System name"}).fill("browser-project"); await page.getByRole("button", {name:"Create project"}).click(); await page.getByRole("heading", {name:"browser-project"}).waitFor(); }'
+  if ! browser_result=$("${browser[@]}" run-code --filename scripts/playwright-release.js); then
+    printf '%s\n' "$browser_result" >&2
+    exit 1
+  fi
+  printf '%s\n' "$browser_result"
+  grep -Fxq '"SDDP browser release check passed"' <<< "$browser_result"
   "${browser[@]}" close
   browser_started=0
 fi

@@ -5,6 +5,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Objects;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -22,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
     @LocalServerPort int port;
     private static final String SCHEMA = "snapshot_test_" + UUID.randomUUID().toString().replace("-", "");
-    private static final String URL = System.getenv().getOrDefault("SddP_DB_URL", "jdbc:postgresql://localhost:5432/sddp");
-    private static final String USER = System.getenv().getOrDefault("SddP_DB_USERNAME", "sddp");
-    private static final String PASSWORD = System.getenv().getOrDefault("SddP_DB_PASSWORD", "sddp");
+    private static final String URL = Objects.requireNonNullElse(System.getenv("SddP_DB_URL"), "jdbc:postgresql://localhost:5432/sddp");
+    private static final String USER = Objects.requireNonNullElse(System.getenv("SddP_DB_USERNAME"), "sddp");
+    private static final String PASSWORD = Objects.requireNonNullElse(System.getenv("SddP_DB_PASSWORD"), "sddp");
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry properties) throws Exception {

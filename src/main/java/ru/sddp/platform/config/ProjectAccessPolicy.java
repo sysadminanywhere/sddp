@@ -6,14 +6,17 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.oauth2.jwt.Jwt;
 
-/** Project-level authorization policy used by the OIDC request matchers. */
+/** Project-level authorization policy for OIDC requests. */
 public class ProjectAccessPolicy {
     public boolean isAllowed(Authentication authentication, String requestUri) {
+        String[] parts = requestUri.split("/");
+        return isAllowedForProject(authentication, parts.length < 5 ? null : parts[4]);
+    }
+
+    public boolean isAllowedForProject(Authentication authentication, String projectId) {
         if (authentication == null || !authentication.isAuthenticated()) return false;
         if (authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SDDP_ADMIN"))) return true;
-        String[] parts = requestUri.split("/");
-        if (parts.length < 5) return false;
-        String projectId = parts[4];
+        if (projectId == null) return false;
         if (!(authentication instanceof JwtAuthenticationToken token)) return false;
         Jwt jwt = token.getToken();
         Object projects = jwt.getClaims().get("projects");

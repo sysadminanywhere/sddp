@@ -11,7 +11,7 @@
 #   kubectl -n sddp apply -f deploy/kubernetes.yaml
 #
 # The Service is ClusterIP only. Expose it through an authenticated HTTPS
-# gateway or ingress; the application has no authentication of its own.
+# gateway or ingress. JWT/OIDC resource-server protection is optional.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -34,6 +34,9 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["create", "get", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs/status"]
+    verbs: ["get"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]

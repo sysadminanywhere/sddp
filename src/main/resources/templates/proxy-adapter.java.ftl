@@ -11,6 +11,8 @@ import java.time.Duration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.nio.charset.StandardCharsets;
+import org.springframework.http.MediaType;
 import java.util.ArrayList;
 import java.util.List;
 </#if>
@@ -59,14 +61,22 @@ public class ${client_name} {
     }
     <#list methods as method_name>
     public Object ${method_name}(Object request) {
-        Object payload = <#if mapping_json?has_content>transform(request)<#else>request</#if>;
+        <#if mapping_json?has_content>
+        byte[] payload = transform(request).toString().getBytes(StandardCharsets.UTF_8);
+        <#else>
+        Object payload = request;
+        </#if>
         return breaker.executeSupplier(() -> executeRequest(payload));
     }
     </#list>
     private Object executeRequest(Object payload) {
         for (int attempt = 0;; attempt++) {
             try {
-                return restClient.post()<#if security_jwt>.headers(headers -> headers.setBearerAuth(bearerToken))</#if>.uri("${target_endpoint}").body(payload).retrieve().body(Object.class);
+                return restClient.post()<#if security_jwt>.headers(headers -> headers.setBearerAuth(bearerToken))</#if>.uri("${target_endpoint}")
+                    <#if mapping_json?has_content>
+                    .contentType(MediaType.APPLICATION_JSON)
+                    </#if>
+                    .body(payload).retrieve().body(Object.class);
             } catch (ResourceAccessException e) {
                 if (attempt >= ${retries?c}) throw e;
             }

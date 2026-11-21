@@ -14,12 +14,12 @@
 6. [Intermediate Representation (IR)](#intermediate-representation-ir)
 7. [Topology Snapshot v1](#topology-snapshot-v1)
 8. [Code Generation](#code-generation)
-7. [Plugin Executors](#plugin-executors)
-8. [Security Model](#security-model)
-9. [Database Schema](#database-schema)
-10. [Configuration](#configuration)
-11. [Deployment](#deployment)
-12. [Development](#development)
+9. [Plugin Executors](#plugin-executors)
+10. [Security Model](#security-model)
+11. [Database Schema](#database-schema)
+12. [Configuration](#configuration)
+13. [Deployment](#deployment)
+14. [Development](#development)
 
 ---
 
@@ -33,18 +33,19 @@
 | **Environment** | `id`, `project_id`, `code`, `name`, `position`, `is_protected`, `created_at` | Profile within project (DEV/STAGE/PROD) |
 | **Service** | `id`, `project_id`, `name`, `service_type` (CORE/EXTERNAL/ADAPTER), `description`, `position_x`, `position_y`, `created_at` | Node in topology |
 | **API Operation** | `id`, `service_id`, `name`, `version`, `description`, `pattern` (REQUEST_RESPONSE/PUB_SUB), `request_schema` (JSONB), `response_schema` (JSONB), `created_at` | Belongs to service; multiple versions supported |
-| **Connection** | `id`, `project_id`, `environment`, `source_service_id`, `target_service_id`, `source_api_id`, `target_api_id`, `transport_type` (REST), `connection_settings` (JSONB), `mapping_rules` (JSONB), `updated_at` | Directed edge in one environment |
+| **Connection** | `id`, `project_id`, `environment`, `source_service_id`, `target_service_id`, `source_api_id`, `target_api_id`, `transport_type` (REST, GRPC, KAFKA, RABBITMQ), `connection_settings` (JSONB), `mapping_rules` (JSONB), `updated_at` | Directed edge in one environment |
 
 ### Connection Settings (JSONB)
 
 ```json
 {
+  "scheme": "http",
   "host": "target-host",
   "port": 8080,
   "target_endpoint": "/api/v1/action",
   "timeout_ms": 5000,
   "retries": 3,
-  "security_type": "NONE|MTLS|JWT"
+  "security_type": "NONE"
 }
 ```
 
@@ -118,7 +119,7 @@ Base path: `/api/v1`
 | `PUT` | `/projects/{id}/environments/{environmentId}` | Update (rename code/name, protect, position) |
 | `DELETE` | `/projects/{id}/environments/{environmentId}` | Delete (409 if connections exist) |
 | `GET` | `/projects/{id}/environments/compare?sourceEnvironment=X&targetEnvironment=Y` | Compare connections |
-| `POST` | `/projects/{id}/connections/copy` | Copy connections `{sourceEnvironment, targetEnvironment, mode: MERGE|REPLACE}` |
+| `POST` | `/projects/{id}/connections/copy` | Copy connections `{sourceEnvironment, targetEnvironment, mode: MERGE\|REPLACE}` |
 
 ### Topology & IR
 
@@ -145,7 +146,7 @@ Base path: `/api/v1`
 
 ## UI Pages
 
-All pages are server-rendered static HTML + vanilla JS modules. State (projectId, environment) synced via `localStorage` + query params.
+Spring Boot serves static HTML and JavaScript. The connection graph uses a React Flow bundle. Project and environment selections are synchronized through URL query parameters and `localStorage`.
 
 | Route | Purpose |
 |-------|---------|
@@ -174,20 +175,18 @@ React Flow bundle: `static/flow/graph.js` + `static/flow/graph.css` (built from 
 
 | Event | Payload | Description |
 |-------|---------|-------------|
-| `sddp:graph-data` | `{nodes, edges, environment, services, apis}` | Initial render |
+| `sddp:graph-data` | `{nodes, edges}` | Initial render |
 | `sddp:graph-edges` | `edges[]` | Update edges only |
-| `sddp:graph-connect` | `{source, target}` | User dragged handle → open connection dialog |
-| `sddp:graph-edge-click` | `edgeId` | User clicked edge → show details panel |
-| `sddp:graph-auto-layout` | `{direction: LR|RL|TB|BT}` | Run dagre layout |
+| `sddp:graph-auto-layout` | `{direction: LR\|RL\|TB\|BT}` | Run dagre layout |
 | `sddp:graph-fit-view` | — | Fit all nodes in viewport |
 
 ### Events (bundle → window)
 
 | Event | Payload | Description |
 |-------|---------|-------------|
-| `sddp:graph-positions` | `{nodeId: {x, y}, ...}` | Node drag ended → host persists via PUT /services/{id} |
+| `sddp:graph-positions` | `[{id, positionX, positionY}, ...]` | Node drag ended or auto-layout ran → host persists via PUT /services/{id} |
 | `sddp:graph-connect` | `{source, target}` | Request connection dialog |
-| `sddp:graph-edge-click` | `edgeId` | Request edge details panel |
+| `sddp:graph-edge-click` | `{id}` | Request edge details panel or clear selection when `id` is null |
 
 ### Validation (host-side)
 
@@ -203,16 +202,14 @@ React Flow bundle: `static/flow/graph.js` + `static/flow/graph.css` (built from 
 ### Protected Environments
 
 - Default: `PROD` (configurable via `is_protected` flag)
-- Mutations (create/update/delete connections, copy into, delete environment) require:
-  - Form checkbox **or**
-  - Header `X-SDDP-Confirm-Protected: true`
+- Creating, updating, or deleting connections, copying into a protected environment, and renaming its code or deleting it require `X-SDDP-Confirm-Protected: true`. The UI sends the header after confirmation.
 - Without confirmation → HTTP 409 with message
 
 ### Comparison
 
 `GET /environments/compare?sourceEnvironment=DEV&targetEnvironment=STAGE`
 
-Returns diff array with `state`: `CHANGED`, `MISSING_IN_TARGET`, `MISSING_IN_SOURCE`, `SAME`
+Returns connection counts and a `differences` array. Each difference has state `CHANGED`, `MISSING_IN_TARGET`, or `MISSING_IN_SOURCE`.
 
 ### Copy
 
@@ -287,10 +284,10 @@ Produces per-connection Java class with:
 - `RestClient` with connect/read timeouts from `connection_settings`
 - Retry loop (`retries` times on `ResourceAccessException`)
 - Resilience4j `CircuitBreaker` (sliding window 5, 100% failure threshold, 30s open)
-- Methods matching IR `methods[]` → `uri(target_endpoint)`
+- Methods matching IR `methods[]` send HTTP `POST` requests to `target_endpoint`
 - Embedded mapping logic (Jackson `ObjectMapper` + transformation rules)
 
-**Limitations**: REST and `REQUEST_RESPONSE` only. Built-in clients support `security_type=NONE` and `JWT`; JWT clients require `scheme=https`, receive a bearer token through their constructor and never embed it in generated source. MTLS and other security types require a plugin.
+The built-in generator supports REST `REQUEST_RESPONSE` connections and `security_type=NONE` or `JWT`. For JWT, set `connectionSettings.scheme=https` via the topology API or a snapshot. The generated constructor accepts the bearer token at runtime. mTLS and other transports require a registered plugin.
 
 ### Plugin Framework
 
@@ -301,7 +298,7 @@ Two executors, mutually exclusive via Spring profiles:
 | `docker` (default) | `DockerPluginExecutor` | Runs plugin container with bind-mounted `/input` (IR JSON) + `/output`; captures stdout/stderr; exit≠0 → `PluginGenerationException` |
 | `k8s` | `KubernetesJobPluginExecutor` | Creates ConfigMap + Job; reads base64-gzipped tar from pod logs between `SDDP_OUTPUT_BEGIN`/`END` markers |
 
-Plugin image must contain: `/bin/sh`, `plugin` (executable), `tar`, `gzip`, `base64`, `tr`.
+The plugin executable receives `/input/ir.json` and `/output` as arguments. See the executor-specific prerequisites below.
 
 ### PluginGenerationException
 
@@ -326,7 +323,8 @@ Thrown when executor fails:
 
 ### KubernetesJobPluginExecutor (`@Profile("k8s")`)
 
-- Requires: `SDDP_K8S_NAMESPACE` (default `default`), `SDDP_K8S_POLL_SECONDS` (default 2)
+- Settings: `SDDP_K8S_NAMESPACE` (default `default`), `SDDP_K8S_POLL_SECONDS` (default 2)
+- Plugin image provides `/bin/sh`, `plugin`, `tar` with gzip support, `base64`, and `tr`
 - Creates: ConfigMap (IR), Job (plugin pod)
 - Pod: `restartPolicy: Never`, `readOnlyRootFilesystem`, `dropAllCapabilities`, no service account token
 - Job limits: 1 CPU, 512 MiB RAM, 32 MiB ephemeral storage, 16 MiB output volume and 5 minute execution deadline; node-level PID limits remain a cluster responsibility
@@ -342,9 +340,9 @@ Resolves active executor via `ObjectProvider<PluginExecutor>` — exactly one mu
 
 ## Security Model
 
-- **OIDC/JWT resource-server protection is optional** — enabled by `SDDP_OIDC_ISSUER_URI`; otherwise use an authenticated reverse proxy (OAuth2/OIDC, mTLS, VPN)
-- **No PII in database** — only integration metadata
-- **Protected environment mutations** require explicit confirmation (checkbox or header)
+- **OIDC/JWT resource-server protection** requires `SDDP_OIDC_ENABLED=true` and `SDDP_OIDC_ISSUER_URI`. The browser UI has no OIDC sign-in flow. Use an authenticated HTTPS gateway for remote browser access.
+- **Stored data** includes topology metadata and the actor identifier in audit events. Keep secrets and personal data out of user-entered topology fields.
+- **Protected environment writes** require the confirmation header for connection changes, promotion into the environment, code changes, and deletion
 - **Delete guards** prevent orphaned references (HTTP 409)
 - **Plugin isolation**: Docker network=none / K8s readOnlyRootFilesystem + dropped capabilities
 - **Docker socket access** required for Docker executor — treat as root equivalent
@@ -358,15 +356,15 @@ Audit events are retained for 90 days by default and expired rows are removed da
 
 The optional Caddy gateway below applies HTTP Basic authentication to every route and rejects state-changing requests unless `Origin` exactly matches the configured HTTPS origin. API clients must supply that header for POST, PUT, PATCH and DELETE. It uses one shared account, not per-user roles, MFA, or audit identity. Allow port 8080 only on the host's loopback interface and never expose the application directly; anyone with local host access can bypass the gateway.
 
-When OIDC is enabled, JWTs must contain a `roles` claim and may contain a `projects` claim. `SDDP_ADMIN` grants access to all projects; other users may access only project UUIDs listed in `projects`. Project creation/import and metrics require `SDDP_ADMIN`. The application disables CSRF for this stateless bearer-token mode; keep it behind TLS.
+In OIDC mode, JWTs carrying `SDDP_ADMIN` in the `roles` claim can list, create, and import projects, generate code, and read metrics. For other tokens, SDDP checks the `projects` claim on routes under `/api/v1/projects/{projectId}` and on the legacy global topology write route. This grant covers both read and write operations. Bearer-token mode is stateless and should be served over TLS.
 
-For a team, prefer an identity-aware gateway backed by an organization's OIDC provider with MFA. The gateway must authenticate every route, remove user-supplied identity headers, authorize requests based on trusted identity and groups, protect state-changing requests against CSRF, and record actor, request, outcome and timestamp without logging credentials or payloads. A gateway alone cannot enforce project-level permissions unless it has project-aware policy; add application-level authorization and audit events before offering per-project roles. The included Basic Auth configuration does not provide these capabilities.
+For a team, prefer an identity-aware gateway backed by an organization's OIDC provider with MFA. The gateway must authenticate every route, remove user-supplied identity headers, authorize requests based on trusted identity and groups, protect state-changing requests against CSRF, and record actor, request, outcome and timestamp without logging credentials or payloads. Use project-aware authorization for project isolation. The included Basic Auth gateway uses one shared account.
 
 ---
 
 ## Database Schema
 
-Tables (Flyway migrations V1–V5):
+Tables (Flyway migrations V1–V6):
 
 | Table | Purpose |
 |-------|---------|
@@ -376,8 +374,9 @@ Tables (Flyway migrations V1–V5):
 | `project_environments` | Environment definitions |
 | `topology_connections` | Connections per environment + settings + mapping |
 | `codegen_plugins` | Registered plugin descriptors |
+| `audit_events` | Actor identifier, method, path, status, duration, and creation time |
 
-All FKs `ON DELETE CASCADE` from `projects`.
+Deleting a project cascades to its topology records. Audit events and registered plugins have no project foreign key.
 
 ---
 
@@ -469,7 +468,7 @@ docker compose -f docker-compose.prod.yml exec -T postgres psql -U sddp -d sddp_
 
 Use a new restore database name for each rehearsal; `createdb` intentionally fails if it already exists. Check application data and Flyway history before treating a backup as usable. A real recovery should stop writes, restore into a new database, validate it with the matching application version, and switch the connection only after validation; retain the original database until recovery is accepted. Backups may contain sensitive connection configuration: encrypt them, restrict access, retain copies outside the server, and rehearse restoration regularly. Database backups do not include Caddy certificates, gateway credentials or deployment configuration; back those up separately.
 
-`bash scripts/test-compose-recovery.sh` rehearses export/import, IR generation, backup/restore and app restart in an isolated Compose project, and removes only its own temporary containers, volumes and backup afterward. It requires Docker Compose with `!reset`/`!override`, Bash, curl and Node.js. Set `SDDP_TEST_BROWSER=1` to also create a project through the HTTPS UI using Playwright CLI and installed Chrome; CI enables this check. The browser check uses port 18443 on localhost and needs npm access to install the pinned Playwright CLI.
+`bash scripts/test-compose-recovery.sh` rehearses export/import, IR generation, backup/restore and app restart in an isolated Compose project, and removes only its own temporary containers, volumes and backup afterward. It requires Docker Compose with `!reset`/`!override`, Bash, curl and Node.js. Set `SDDP_TEST_BROWSER=1` to exercise the HTTPS UI with Playwright CLI and installed Chrome. The browser scenario creates and edits a graph connection, checks saved positions after reload, maps request fields, copies the connection into protected PROD, and generates the REST client. CI enables this check. The browser check uses port 18443 on localhost and needs npm access to install the pinned Playwright CLI.
 
 `SDDP_UPGRADE_BASE_REF=HEAD^ bash scripts/test-upgrade-rollback.sh` builds the selected Git revision's source and the current source into separate images, creates data with the baseline, upgrades while retaining the database, writes more data, and verifies both records after rolling back. CI uses the pull request base or preceding commit as the baseline. This verifies only the selected revisions and migrations; before a real release, repeat it against the actual deployed version and keep a restorable backup, because a future schema migration may prevent rollback.
 
@@ -492,7 +491,7 @@ docker compose -f docker-compose.dev.yml up app
 - Plugin Jobs: `backoffLimit: 0`, `activeDeadlineSeconds: 300`, read-only root filesystem, all capabilities dropped, no service account token; the executor waits up to 6 minutes
 - Limits: IR under 800 KB (ConfigMap data), plugin output under 5 MB compressed and 10 MB extracted
 - Images are started with `imagePullPolicy: IfNotPresent` and no `imagePullSecrets`; pre-pull them or attach a pull secret to the namespace's `default` service account
-- Apply a NetworkPolicy to restrict plugin pod egress
+- The supplied NetworkPolicy denies plugin pod egress on clusters with a CNI that enforces NetworkPolicy
 - The bundled manifest includes a default-deny egress policy for plugin pods; add narrowly scoped exceptions only for plugins that require network access
 
 ---
@@ -535,6 +534,8 @@ mvn verify  # unit tests and H2 integration; external integration tests are opt-
 | Docker Plugin IT | `mvn -Dtest=DockerPluginIntegrationTest test` | Docker daemon + `SDDP_DOCKER_IT=true` |
 | Profile Isolation | `mvn -Dtest=PluginProfileTest test` | None |
 
+CI also applies the shipped Kubernetes manifest in a temporary kind namespace, starts PostgreSQL, and calls the generation API to run the fixture Job using the application's ServiceAccount. To repeat the check in a disposable cluster, load the app image as `sddp-kubernetes-test:local` and the fixture as `sddp-plugin-fixture:local`, then run `bash scripts/test-kubernetes-release.sh` with `kubectl`, `curl`, and `jq` installed.
+
 The PostgreSQL test creates a uniquely named schema, runs the Flyway migrations, exercises import/export and HTTP JSON, and drops that schema afterward. CI runs this test against its PostgreSQL service. Docker plugin integration additionally requires the `sddp-plugin-fixture:local` image (build it from `src/test/resources/docker-plugin`).
 
 Application JSON models and schema validation use Jackson 3. Hibernate's JSON/JSONB format mapper is explicitly configured for Jackson 3 because the Hibernate release in use otherwise selects Jackson 2 when it is present. Jackson 2 databind remains a runtime dependency for Spring's detection of transitive Jackson 2 components; generated Java clients also retain their existing Jackson 2 contract. The deprecated Spring Boot Jackson 2 compatibility module is no longer used.
@@ -551,7 +552,7 @@ src/
 │   │   ├── service/       # Business logic
 │   │   └── web/           # REST controllers
 │   └── resources/
-│       ├── db/migration/  # Flyway V1–V5
+│       ├── db/migration/  # Flyway V1–V6
 │       ├── static/        # HTML/JS/CSS (served as-is)
 │       └── templates/     # FreeMarker codegen templates
 └── test/                  # Unit + integration tests
@@ -564,8 +565,9 @@ frontend/                  # React Flow + dagre source (npm build → static/flo
 
 - Version in `pom.xml` → propagated to Docker image labels + tags via CI
 - CI tags:
-  - `main` branch: `{version}-{sha}`, `{version}`, `latest`
+  - `main` branch: `{version}-{sha}`
   - `vX.Y.Z` tag: `X.Y.Z`, `X.Y`, `latest`
+- Use the commit-specific image tag or a digest for reproducible deployments.
 - Release: push tag `v0.1.0` → CI builds and pushes to Docker Hub when both `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets are configured; otherwise publication is skipped.
 - A release tag must exactly match the non-SNAPSHOT version in `pom.xml`; CI rejects mismatches before publishing. Verify the previous deployed version's backup and upgrade/rollback test before tagging.
 

@@ -1,8 +1,8 @@
 # SDDP — Spec-Driven Development Platform
 
-> **Design integrations as code. Generate production-ready clients automatically.**
+> **Design integration topologies and generate Java REST clients from their contracts.**
 
-SDDP is an open-source platform for **spec-driven integration development**. Define your services, APIs, and connections once — get validated topology, intermediate representation (IR), and generated client code for any environment.
+SDDP is an MIT-licensed platform for **spec-driven integration development**. Define services, JSON Schema contracts, and environment-specific connections. Build a validated intermediate representation (IR) and generate clients for supported connections.
 
 ---
 
@@ -37,22 +37,22 @@ SDDP is an open-source platform for **spec-driven integration development**. Def
 - Dagre auto-layout (LR, RL, TB, BT) + MiniMap + persisted node positions
 
 ### 🏗 **Intermediate Representation (IR)**
-- Single `POST /ir` builds validated manifest for any environment
+- `POST /api/v1/projects/{projectId}/ir?environment=DEV` builds a validated manifest for the selected environment
 - Services, outbound connections, methods, mapping rules — ready for codegen or external tools
 
 ### 📦 **Topology Snapshots (v1)**
 - Export/import services, API schemas, connections, environment settings, and graph positions
-- Versioned, portable JSON — perfect for GitOps or environment seeding
+- Versioned JSON for backing up, sharing, and seeding project topology. Import creates a new project.
 
 ### ⚡ **Code Generation**
-- **Built-in**: Java 21 + Spring `RestClient` + Resilience4j circuit breaker + retries
-- **Extensible**: Docker / Kubernetes plugin executors (isolated profiles)
+- **Built-in**: Java 21, Spring `RestClient` and Resilience4j for REST `REQUEST_RESPONSE` connections using HTTP `POST`
+- **Extensible**: Docker and Kubernetes executors run registered plugins. gRPC, Kafka, and RabbitMQ are available in the topology model and require a plugin for code generation.
 - Generated code includes: timeouts, base URLs, embedded mapping logic, circuit breaker config
 
 ### 🔒 **Safety & Governance**
 - Delete guards: HTTP 409 if service/API/environment is referenced
-- No PII in database — only integration metadata
-- Protected environment mutations require `X-SDDP-Confirm-Protected` header
+- The database stores topology metadata and audit events, including the authenticated actor identifier. Keep secrets and personal data out of schemas and mappings.
+- Connection writes in protected environments, promotion into them, and renaming or deleting them require `X-SDDP-Confirm-Protected: true`
 
 ---
 
@@ -67,9 +67,9 @@ mvn spring-boot:run
 # → http://localhost:8080
 ```
 
-**Default profiles:** `docker` (local), `k8s` (Kubernetes executor).
+The default profile is `docker`. Use the `k8s` profile for the Kubernetes executor.
 
-Authentication is disabled in the default local profile. For remote access, set both `SDDP_OIDC_ENABLED=true` and `SDDP_OIDC_ISSUER_URI` to enable JWT/OIDC protection, or put the application behind an authenticated HTTPS gateway and restrict direct access. See the security guidance in [Technical Reference](TECHNICAL.md#security-model).
+Authentication is disabled by default. For remote browser access, put the application behind an authenticated HTTPS gateway and restrict direct access. API clients can use bearer tokens when `SDDP_OIDC_ENABLED=true` and `SDDP_OIDC_ISSUER_URI` are configured. See the access rules and limitations in the [Technical Reference](TECHNICAL.md#security-model).
 
 ---
 
@@ -93,12 +93,12 @@ docker compose -f docker-compose.prod.yml logs -f app
 
 `docker-compose.prod.yml` publishes the application only on `127.0.0.1:8080` and keeps PostgreSQL on an internal network with data in the `sddp-postgres` volume. `POSTGRES_PASSWORD` is required — do not reuse a password from an example.
 
-To run an image published by CI instead of building from source (images are pushed when `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` are configured, tagged `<version>`, `<version>-<sha>` and `latest`):
+To install from Docker Hub, select an image tag that has already been published. GitHub Actions pushes images when `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are configured. Builds from `main` publish `<version>-<sha>`. Git release tags publish the version, minor series, and `latest`. For reproducible deployments, pin the image by digest or use a commit-specific tag.
 
 ```bash
 export POSTGRES_PASSWORD='<strong password>'
 export IMAGE_NAME=docker.io/<owner>/sddp
-export IMAGE_TAG=0.1.0   # any tag pushed by CI, or the full version
+export IMAGE_TAG=0.1.0   # replace with a published tag
 
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d --no-build
@@ -199,10 +199,8 @@ Each plugin Job has limits of 1 CPU, 512 MiB memory and 32 MiB ephemeral storage
 
 ---
 
-## Status
-
-**Version 0.1.0** — Core vertical complete:
-- ✅ Full CRUD for projects, services, APIs, connections, environments
+## Features in 0.1.0
+- ✅ Project creation, viewing, listing, and deletion, plus CRUD for services, API operations, connections, and environments
 - ✅ Graph editor with validation & persistence
 - ✅ Environment comparison & promotion
 - ✅ IR build + Snapshot v1 export/import
@@ -214,7 +212,7 @@ Each plugin Job has limits of 1 CPU, 512 MiB memory and 32 MiB ephemeral storage
 
 ## License
 
-MIT — free for commercial use.
+[MIT](LICENSE) — free for commercial use.
 
 ---
 

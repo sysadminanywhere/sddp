@@ -1,10 +1,12 @@
 package ru.sddp.platform.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import org.junit.jupiter.api.Test;
 import java.io.StringWriter;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
@@ -34,10 +36,30 @@ class GeneratedMappingTest {
         var config = new Configuration(Configuration.VERSION_2_3_34);
         config.setClassLoaderForTemplateLoading(getClass().getClassLoader(), "templates");
         Template template = config.getTemplate("proxy-adapter.java.ftl");
-        var source = new StringWriter();
-        template.process(Map.of("package_name", "example", "client_name", "GeneratedClient", "base_url", "http://localhost:8080", "target_endpoint", "/orders", "methods", List.of("send"), "mapping_json", rules, "timeout_ms", 5000, "retries", 3, "security_jwt", false), source);
         var directory = Files.createTempDirectory("sddp-generated-test-");
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/orders", exchange -> {
+            try (exchange) {
+                if (!"POST".equals(exchange.getRequestMethod())) {
+                    exchange.sendResponseHeaders(405, -1);
+                    return;
+                }
+                if (!"application/json".equals(exchange.getRequestHeaders().getFirst("Content-Type"))) {
+                    exchange.sendResponseHeaders(415, -1);
+                    return;
+                }
+                byte[] payload = exchange.getRequestBody().readAllBytes();
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, payload.length);
+                exchange.getResponseBody().write(payload);
+            }
+        });
         try {
+            server.start();
+            var source = new StringWriter();
+            String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+            template.process(Map.of("package_name", "example", "client_name", "GeneratedClient", "base_url", baseUrl, "target_endpoint", "/orders", "methods", List.of("send"), "mapping_json", rules, "timeout_ms", 5000, "retries", 3, "security_jwt", false), source);
+
             var javaFile = directory.resolve("GeneratedClient.java");
             Files.writeString(javaFile, source.toString(), StandardCharsets.UTF_8);
             int result = ToolProvider.getSystemJavaCompiler().run(null, null, null, "-classpath", System.getProperty("java.class.path"), "-d", directory.toString(), javaFile.toString());
@@ -60,6 +82,11 @@ class GeneratedMappingTest {
                 assertEquals("RUB", output.path("currency").asText());
                 assertNull(type.getMethod("send", Object.class).invoke(instance, input));
                 verify(client, times(2)).post();
+
+                var httpClient = type.getConstructor(RestClient.Builder.class, ObjectMapper.class)
+                    .newInstance(RestClient.builder(), mapper);
+                Object response = type.getMethod("send", Object.class).invoke(httpClient, input);
+                assertEquals(output, mapper.valueToTree(response));
                 RestClient failingClient = mock(RestClient.class);
                 when(failingClient.post()).thenThrow(new org.springframework.web.client.ResourceAccessException("offline"));
                 when(builder.build()).thenReturn(failingClient);
@@ -74,6 +101,7 @@ class GeneratedMappingTest {
                 verify(failingClient, times(20)).post();
             }
         } finally {
+            server.stop(0);
             try (var files = Files.walk(directory)) { for (var file : files.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(file); }
         }
     }

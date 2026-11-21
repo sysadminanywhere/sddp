@@ -151,8 +151,8 @@ jobs:
             MAJOR_MINOR=$(echo $TAG_VERSION | cut -d. -f1,2)
             VERSIONS=("$TAG_VERSION" "$MAJOR_MINOR" latest)
           else
-            # Main branch: version-SHA, clean_version, latest
-            VERSIONS=("${VERSION}-${SHA}" "$VERSION" latest)
+            # Main builds publish a commit-specific image. Release tags own the version and latest.
+            VERSIONS=("${VERSION}-${SHA}")
           fi
           {
             echo 'tags<<EOF'
@@ -245,6 +245,12 @@ jobs:
         env:
           SDDP_K8S_IT: 'true'
         run: mvn -B -Dtest=KubernetesPluginIntegrationTest test
+
+      - name: Verify deployed application and ServiceAccount against a real cluster
+        run: |
+          docker build -t sddp-kubernetes-test:local .
+          kind load docker-image sddp-kubernetes-test:local --name sddp-test
+          bash scripts/test-kubernetes-release.sh
 
   docker-plugin-test:
     needs: test

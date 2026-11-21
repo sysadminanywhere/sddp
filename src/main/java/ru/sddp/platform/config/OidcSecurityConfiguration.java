@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -20,14 +21,18 @@ import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 
-/** Optional JWT/OIDC protection. It activates only when an issuer is configured. */
+/** Optional JWT/OIDC protection for the REST API. */
 @Configuration
+@EnableMethodSecurity
 @ConditionalOnProperty(name = "sddp.security.oidc.enabled", havingValue = "true")
 public class OidcSecurityConfiguration {
-    private final ProjectAccessPolicy projectAccess = new ProjectAccessPolicy();
+    @Bean
+    ProjectAccessPolicy projectAccessPolicy() {
+        return new ProjectAccessPolicy();
+    }
 
     @Bean
-    SecurityFilterChain oidcSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain oidcSecurityFilterChain(HttpSecurity http, ProjectAccessPolicy projectAccess) throws Exception {
         AuthorizationManager<RequestAuthorizationContext> projectAuthorization = (authentication, context) ->
             new AuthorizationDecision(projectAccess.isAllowed(authentication.get(), context.getRequest().getRequestURI()));
 
