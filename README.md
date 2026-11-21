@@ -99,7 +99,7 @@ To install from Docker Hub, select an image tag that has already been published.
 ```bash
 export POSTGRES_PASSWORD='<strong password>'
 export IMAGE_NAME=docker.io/<owner>/sddp
-export IMAGE_TAG=0.1.0   # replace with a published tag
+export IMAGE_TAG=0.2.0   # replace with a published tag
 
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d --no-build
@@ -114,8 +114,8 @@ Upgrades rebuild (`--build`) or pull (`--no-build`) the image and let Flyway mig
 1. Build and push the image to a registry the cluster can pull from:
 
    ```bash
-   docker build -t registry.example.com/sddp:0.1.0 .
-   docker push registry.example.com/sddp:0.1.0
+   docker build -t registry.example.com/sddp:0.2.0 .
+   docker push registry.example.com/sddp:0.2.0
    ```
 
 2. Create the namespace and the database password secret:
@@ -202,7 +202,7 @@ Each plugin Job has limits of 1 CPU, 512 MiB memory and 32 MiB ephemeral storage
 
 ## Project status
 
-The current development version is `0.2.0-SNAPSHOT`. The OpenAPI pilot uses the [orders example](docs/examples/orders.openapi.json). The latest published version is [0.1.0](https://github.com/sysadminanywhere/sddp/releases/tag/v0.1.0).
+The [0.2.0 release](https://github.com/sysadminanywhere/sddp/releases/tag/v0.2.0) includes the OpenAPI pilot, which uses the [orders example](docs/examples/orders.openapi.json).
 
 ### Core features
 - ✅ Project creation, viewing, listing, and deletion, plus CRUD for services, API operations, connections, and environments

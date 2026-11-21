@@ -31,7 +31,7 @@ namespace_created=1
 "${kube[@]}" wait --for=condition=Ready pod/postgres --timeout=120s
 
 # Keep the shipped Deployment, ServiceAccount and RBAC intact.
-sed -e "s|docker.io/CHANGE_ME/sddp:0.1.0|$app_image|" \
+sed -e "s|docker\.io/CHANGE_ME/sddp:[^[:space:]]*|$app_image|" \
   -e 's|postgres.example.internal|postgres|' deploy/kubernetes.yaml | "${kube[@]}" apply -f -
 if ! "${kube[@]}" rollout status deployment/sddp --timeout=240s; then
   "${kube[@]}" describe pods -l app.kubernetes.io/name=sddp

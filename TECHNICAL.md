@@ -448,7 +448,7 @@ export POSTGRES_PASSWORD='<strong unique password>'
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-To run a prebuilt image instead, set `IMAGE_NAME` (repository) and `IMAGE_TAG` (defaults to `latest`) and skip the build: `IMAGE_NAME=docker.io/<owner>/sddp IMAGE_TAG=0.1.0 docker compose -f docker-compose.prod.yml up -d --no-build`. Step-by-step instructions for both paths are in the [README](README.md#docker-single-host).
+To run a prebuilt image instead, set `IMAGE_NAME` (repository) and `IMAGE_TAG` (defaults to `latest`) and skip the build: `IMAGE_NAME=docker.io/<owner>/sddp IMAGE_TAG=0.2.0 docker compose -f docker-compose.prod.yml up -d --no-build`. Step-by-step instructions for both paths are in the [README](README.md#docker-single-host).
 
 `docker-compose.prod.yml`:
 - `app` (built image) + `postgres:16-alpine`
@@ -586,7 +586,7 @@ frontend/                  # React Flow + dagre source (npm build → static/flo
   - `main` branch: `{version}-{sha}`
   - `vX.Y.Z` tag: `X.Y.Z`, `X.Y`, `latest`
 - Use the commit-specific image tag or a digest for reproducible deployments.
-- Release: push tag `v0.1.0` → CI builds and pushes to Docker Hub when both `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets are configured; otherwise publication is skipped.
+- Release: push tag `v0.2.0` → CI builds and pushes to Docker Hub when both `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets are configured; otherwise publication is skipped.
 - A release tag must exactly match the non-SNAPSHOT version in `pom.xml`; CI rejects mismatches before publishing. Verify the previous deployed version's backup and upgrade/rollback test before tagging.
 
 ---
