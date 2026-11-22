@@ -2,6 +2,7 @@ package ru.sddp.platform.service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -14,6 +15,7 @@ import javax.lang.model.SourceVersion;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.sddp.platform.api.HttpOperation;
+import ru.sddp.platform.api.HttpOperation.Encoding;
 import ru.sddp.platform.api.OpenApiModels;
 import ru.sddp.platform.domain.ApiPattern;
 import ru.sddp.platform.domain.ServiceApi;
@@ -35,6 +37,7 @@ import static ru.sddp.platform.api.OpenApiModels.MAX_SELECTION;
 @Service
 public class OpenApiImportService {
     private static final int MAX_CATALOG_OPERATIONS = 10_000;
+    private static final Set<String> SCALARS = Set.of("string", "integer", "number", "boolean");
     private static final YAMLMapper YAML = YAMLMapper.builder(YAMLFactory.builder()
         .loadSettings(LoadSettings.builder().setCodePointLimit(10_000_000).build())
         .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(100).build())
@@ -67,31 +70,45 @@ public class OpenApiImportService {
     public OpenApiModels.Preview preview(UUID projectId, UUID serviceId, OpenApiModels.PreviewRequest request) {
         catalog.requireService(projectId, serviceId);
         Inventory inventory = inventory(document(request.document(), request.yaml()));
-        Set<String> existing = new HashSet<>();
-        apis.findByServiceIdOrderByNameAscVersionAsc(serviceId).stream()
-            .filter(api -> inventory.version().equals(api.getVersion()))
-            .forEach(api -> existing.add(api.getName()));
+        var existing = new LinkedHashMap<String, ServiceApi>();
+        var latest = new LinkedHashMap<String, ServiceApi>();
+        for (ServiceApi api : apis.findByServiceIdOrderByNameAscVersionAsc(serviceId)) {
+            if (inventory.version().equals(api.getVersion())) existing.put(api.getName(), api);
+            latest.merge(api.getName(), api, (left, right) -> right.getCreatedAt().isAfter(left.getCreatedAt()) ? right : left);
+        }
         boolean selectionRequired = request.operations() == null && inventory.operations().size() > MAX_SELECTION;
         if (selectionRequired) {
             var operations = inventory.operations().values().stream()
-                .map(candidate -> describe(candidate, existing)).toList();
+                .map(candidate -> describe(candidate, existing.containsKey(candidate.name()), null)).toList();
             return new OpenApiModels.Preview(inventory.version(), operations, inventory.warnings(), true);
         }
 
         Parsed parsed = parse(inventory, request.operations());
-        var operations = parsed.operations().keySet().stream()
-            .map(key -> describe(inventory.operations().get(key), existing)).toList();
+        var operations = parsed.operations().entrySet().stream().map(entry -> {
+            Candidate candidate = inventory.operations().get(entry.getKey());
+            boolean exists = existing.containsKey(candidate.name());
+            ServiceApi baseline = exists ? existing.get(candidate.name()) : latest.get(candidate.name());
+            return describe(candidate, exists, baseline == null ? null : compare(baseline, entry.getValue()));
+        }).toList();
         return new OpenApiModels.Preview(inventory.version(), operations, parsed.warnings(), false);
     }
 
-    private OpenApiModels.Operation describe(Candidate operation, Set<String> existing) {
+    private OpenApiModels.Operation describe(Candidate operation, boolean exists, OpenApiModels.Comparison comparison) {
         return new OpenApiModels.Operation(operation.key(), operation.name(), operation.method(),
-            operation.path(), existing.contains(operation.name()));
+            operation.path(), exists, comparison);
+    }
+
+    private OpenApiModels.Comparison compare(ServiceApi baseline, Contract contract) {
+        return OpenApiContractDiff.compare(baseline, contract.request(), contract.response(), contract.http(), mapper);
     }
 
     @Transactional
     public OpenApiModels.ImportResult importSelected(UUID projectId, UUID serviceId, OpenApiModels.ImportRequest request) {
         Inventory inventory = inventory(document(request.document(), request.yaml()));
+        String version = request.version() == null ? inventory.version() : request.version().trim();
+        if (version.isBlank() || version.length() > 255) {
+            throw new IllegalArgumentException("Import version must be a non-empty string of at most 255 characters");
+        }
         Parsed parsed = parse(inventory, request.operations());
         var keys = new LinkedHashSet<>(request.operations());
         if (!parsed.operations().keySet().containsAll(keys)) {
@@ -100,21 +117,24 @@ public class OpenApiImportService {
 
         var service = services.lockByIdAndProjectId(serviceId, projectId)
             .orElseThrow(() -> new ResourceNotFoundException("Service not found: " + serviceId));
-        Map<String, UUID> existing = new LinkedHashMap<>();
+        Map<String, ServiceApi> existing = new LinkedHashMap<>();
         apis.findByServiceIdOrderByNameAscVersionAsc(serviceId).stream()
-            .filter(api -> inventory.version().equals(api.getVersion()))
-            .forEach(api -> existing.put(api.getName(), api.getId()));
+            .filter(api -> version.equals(api.getVersion()))
+            .forEach(api -> existing.put(api.getName(), api));
 
         var created = new ArrayList<UUID>();
         var kept = new ArrayList<UUID>();
         for (String key : keys) {
             Contract operation = parsed.operations().get(key);
-            UUID current = existing.get(operation.name());
+            ServiceApi current = existing.get(operation.name());
             if (current != null) {
-                kept.add(current);
+                if (compare(current, operation) != null) {
+                    throw new CompatibilityViolationException(key + " differs from stored version " + version + ". Choose a new import version.");
+                }
+                kept.add(current.getId());
                 continue;
             }
-            var added = apis.save(new ServiceApi(service, operation.name(), inventory.version(), operation.description(),
+            var added = apis.save(new ServiceApi(service, operation.name(), version, operation.description(),
                 ApiPattern.REQUEST_RESPONSE, operation.request(), operation.response(), operation.http()));
             created.add(added.getId());
         }
@@ -221,10 +241,9 @@ public class OpenApiImportService {
         addParameters(parameters, candidate.pathItem().path("parameters"), resolver);
         addParameters(parameters, operation.path("parameters"), resolver);
         JsonNode body = resolver.reference(operation.path("requestBody"), new HashSet<>(), 0);
-        boolean hasBody = !body.isMissingNode();
-        var http = new HttpOperation(candidate.method(), candidate.path(), hasBody, body.path("required").asBoolean(false),
-            List.copyOf(parameters.values()));
-        JsonNode request = hasBody ? jsonSchema(body, resolver) : mapper.createObjectNode().put("type", "object");
+        boolean hasBody = !body.isMissingNode() && !emptyReadBody(candidate.method(), body);
+        String contentType = hasBody ? requestContentType(body) : null;
+        JsonNode request = hasBody ? schema(body, contentType, resolver, false) : mapper.createObjectNode().put("type", "object");
         JsonNode responses = operation.path("responses");
         if (!responses.isObject()) throw new IllegalArgumentException("Operation has no response definitions");
         String success = responses.properties().stream().map(Map.Entry::getKey)
@@ -232,7 +251,10 @@ public class OpenApiImportService {
             .orElseThrow(() -> new IllegalArgumentException("Operation has no successful response"));
         JsonNode response = resolver.reference(responses.path(success), new HashSet<>(), 0);
         if (!response.isObject()) throw new IllegalArgumentException("Invalid successful response");
-        JsonNode responseSchema = response.has("content") ? jsonSchema(response, resolver) : null;
+        JsonNode responseSchema = response.has("content") ? schema(response, HttpOperation.JSON, resolver, true) : null;
+        var http = new HttpOperation(candidate.method(), candidate.path(), hasBody, hasBody && body.path("required").asBoolean(false),
+            List.copyOf(parameters.values()), contentType, success,
+            HttpOperation.FORM.equals(contentType) ? bracketFormFields(body) : List.of());
         validator.validate(request);
         if (responseSchema != null) validator.validate(responseSchema);
         String description = operation.path("description").asText(operation.path("summary").asText(""));
@@ -246,31 +268,103 @@ public class OpenApiImportService {
         for (JsonNode definition : definitions) {
             JsonNode parameter = resolver.reference(definition, new HashSet<>(), 0);
             String location = parameter.path("in").asText("");
-            String style = "path".equals(location) ? "simple" : "form";
-            if (!style.equals(parameter.path("style").asText(style)) || parameter.path("allowReserved").asBoolean(false)) {
-                throw new IllegalArgumentException("Unsupported parameter serialization");
-            }
-            JsonNode schema = resolver.reference(parameter.path("schema"), new HashSet<>(), 0);
-            if (!Set.of("string", "integer", "number", "boolean").contains(schema.path("type").asText(""))) {
-                throw new IllegalArgumentException("Parameters must use scalar schemas");
-            }
+            JsonNode schema = resolver.expandSchema(parameter.path("schema"), new HashSet<>(), 0);
+            Encoding encoding = parameterEncoding(parameter, location, shapes(schema));
             var value = new HttpOperation.Parameter(parameter.path("name").asText(""), location,
-                parameter.path("required").asBoolean(false));
+                parameter.path("required").asBoolean(false), encoding, schema);
             String key = location + ":" + value.name();
             if (!current.add(key)) throw new IllegalArgumentException("Duplicate parameter: " + value.name());
             parameters.put(key, value);
         }
     }
 
-    private JsonNode jsonSchema(JsonNode object, Resolver resolver) {
-        JsonNode schema = object.path("content").path("application/json").path("schema");
-        if (schema.isMissingNode()) throw new IllegalArgumentException("Expected an application/json schema");
-        return resolver.expandSchema(schema, new HashSet<>(), 0);
+    private Encoding parameterEncoding(JsonNode parameter, String location, Set<String> shapes) {
+        var invalid = new IllegalArgumentException("Unsupported parameter serialization");
+        if (parameter.path("allowReserved").asBoolean(false)) throw invalid;
+        String defaultStyle = "path".equals(location) ? "simple" : "form";
+        String style = parameter.path("style").asText(defaultStyle);
+        boolean explode = parameter.path("explode").asBoolean("form".equals(style));
+        if ("query".equals(location) && "deepObject".equals(style) && explode) {
+            if (shapes.equals(Set.of("object"))) return Encoding.DEEP_OBJECT;
+            if (shapes.equals(Set.of("object", "scalar"))) return Encoding.DEEP_OBJECT_OR_SCALAR;
+            if (shapes.equals(Set.of("array"))) return Encoding.BRACKET_ARRAY;
+        }
+        if (!defaultStyle.equals(style)) throw invalid;
+        if (shapes.equals(Set.of("scalar"))) return Encoding.SCALAR;
+        if ("query".equals(location)) {
+            if (shapes.equals(Set.of("array"))) return explode ? Encoding.ARRAY : Encoding.ARRAY_CSV;
+            if (shapes.equals(Set.of("object"))) return explode ? Encoding.OBJECT : Encoding.OBJECT_CSV;
+        }
+        throw new IllegalArgumentException("Unsupported parameter schema");
+    }
+
+    private Set<String> shapes(JsonNode schema) {
+        var shapes = new HashSet<String>();
+        JsonNode type = schema.path("type");
+        if (type.isArray()) {
+            type.forEach(item -> shapes.add(shape(item.asText())));
+        } else if (type.isTextual()) {
+            shapes.add(shape(type.asText()));
+        } else {
+            for (String keyword : List.of("oneOf", "anyOf")) {
+                schema.path(keyword).forEach(item -> shapes.addAll(shapes(item)));
+            }
+            // An untyped branch is not a known serializable shape.
+            if (shapes.isEmpty()) shapes.add("unknown");
+        }
+        shapes.remove("null");
+        return shapes;
+    }
+
+    private String shape(String type) { return SCALARS.contains(type) ? "scalar" : type; }
+
+    private boolean emptyReadBody(String method, JsonNode body) {
+        if (!Set.of("GET", "HEAD").contains(method) || body.path("required").asBoolean(false)) return false;
+        JsonNode content = body.path("content");
+        if (!content.isObject() || content.size() != 1) return false;
+        JsonNode media = content.properties().iterator().next().getValue();
+        JsonNode schema = media.path("schema");
+        return "object".equals(schema.path("type").asText()) && schema.path("properties").isObject()
+            && schema.path("properties").isEmpty() && schema.path("additionalProperties").isBoolean()
+            && !schema.path("additionalProperties").asBoolean() && schema.size() == 3 && media.path("encoding").isEmpty();
+    }
+
+    private String requestContentType(JsonNode body) {
+        JsonNode content = body.path("content");
+        if (content.has(HttpOperation.JSON)) return HttpOperation.JSON;
+        if (!content.has(HttpOperation.FORM)) throw new IllegalArgumentException("Expected a JSON or form request schema");
+        return HttpOperation.FORM;
+    }
+
+    private List<String> bracketFormFields(JsonNode body) {
+        JsonNode media = body.path("content").path(HttpOperation.FORM);
+        var fields = new ArrayList<String>();
+        for (var field : media.path("encoding").properties()) {
+            JsonNode encoding = field.getValue();
+            if (encoding.size() != 2 || !"deepObject".equals(encoding.path("style").asText())
+                || !encoding.path("explode").asBoolean(false)) {
+                throw new IllegalArgumentException("Unsupported form field encoding: " + field.getKey());
+            }
+            fields.add(field.getKey());
+        }
+        return fields;
+    }
+
+    private JsonNode schema(JsonNode object, String type, Resolver resolver, boolean response) {
+        JsonNode schema = object.path("content").path(type).path("schema");
+        if (schema.isMissingNode()) throw new IllegalArgumentException("Expected an " + type + " schema");
+        if (!response) return resolver.expandSchema(schema, new HashSet<>(), 0);
+        try {
+            return resolver.expandSchema(schema, new HashSet<>(), 0);
+        } catch (SchemaExpansionLimit e) {
+            return resolver.bundleResponse(schema);
+        }
     }
 
     private final class Resolver {
         private final JsonNode root;
         private int expandedNodes;
+        private int bundledNodes;
 
         private Resolver(JsonNode root) { this.root = root; }
 
@@ -281,7 +375,11 @@ public class OpenApiImportService {
         }
 
         private JsonNode target(String pointer, Set<String> active, int depth) {
-            if (depth > 40 || !active.add(pointer)) throw new IllegalArgumentException("Recursive or deeply nested OpenAPI reference");
+            if (depth > 40 || !active.add(pointer)) throw new SchemaExpansionLimit("Recursive or deeply nested OpenAPI reference");
+            return lookup(pointer);
+        }
+
+        private JsonNode lookup(String pointer) {
             JsonNode target = root.at(pointer);
             if (target.isMissingNode()) throw new IllegalArgumentException("Unresolved OpenAPI reference");
             return target;
@@ -294,34 +392,92 @@ public class OpenApiImportService {
         }
 
         private JsonNode expandSchema(JsonNode node, Set<String> active, int depth) {
-            if (++expandedNodes > 40_000 || depth > 40) throw new IllegalArgumentException("OpenAPI schema expansion limit exceeded");
+            return rewriteSchema(node, active, depth, null);
+        }
+
+        private JsonNode bundleResponse(JsonNode node) {
+            var bundle = new SchemaBundle();
+            JsonNode response = rewriteSchema(node, Set.of(), 0, bundle);
+            var result = mapper.createObjectNode();
+            result.putArray("allOf").add(response);
+            var definitions = result.putObject("definitions");
+            while (!bundle.pending.isEmpty()) {
+                String pointer = bundle.pending.removeFirst();
+                definitions.set(bundle.names.get(pointer), rewriteSchema(lookup(pointer), Set.of(), 0, bundle));
+            }
+            return result;
+        }
+
+        private JsonNode rewriteSchema(JsonNode node, Set<String> active, int depth, SchemaBundle bundle) {
+            boolean overBudget = bundle == null ? ++expandedNodes > 40_000 : ++bundledNodes > 240_000;
+            if (overBudget || depth > 40) throw new SchemaExpansionLimit("OpenAPI schema expansion limit exceeded");
+            if (node.has("$schema") || node.has("$id") || node.has("$dynamicRef") || node.has("$recursiveRef")) {
+                throw new IllegalArgumentException("Custom schema dialects and reference scopes are unsupported");
+            }
             if (node.has("$ref")) {
-                if (node.size() != 1) throw new IllegalArgumentException("Schema references with sibling fields are unsupported");
                 String pointer = pointer(node);
-                JsonNode resolved = expandSchema(target(pointer, active, depth), active, depth + 1);
-                active.remove(pointer);
-                return resolved;
+                JsonNode resolved;
+                if (bundle == null) {
+                    resolved = rewriteSchema(target(pointer, active, depth), active, depth + 1, null);
+                    active.remove(pointer);
+                } else {
+                    resolved = mapper.createObjectNode().put("$ref", "#/definitions/" + bundle.name(pointer));
+                }
+                if (node.size() == 1) return resolved;
+                var siblings = mapper.createObjectNode();
+                for (var entry : node.properties()) {
+                    if (!"$ref".equals(entry.getKey())) {
+                        siblings.set(entry.getKey(), rewriteSchema(entry.getValue(), active, depth + 1, bundle));
+                    }
+                }
+                boolean nullableReference = siblings.path("nullable").asBoolean(false) && !siblings.has("type");
+                if (nullableReference) {
+                    siblings.remove("nullable");
+                    var nullable = mapper.createObjectNode();
+                    nullable.putArray("anyOf").add(resolved).addObject().put("type", "null");
+                    resolved = nullable;
+                }
+                var combined = mapper.createObjectNode();
+                combined.putArray("allOf").add(resolved).add(normalizeNullable(siblings));
+                return combined;
             }
             if (node.isObject()) {
-                if (node.has("$schema") || node.has("$id") || node.has("$dynamicRef") || node.has("$recursiveRef")) {
-                    throw new IllegalArgumentException("Custom schema dialects and reference scopes are unsupported");
-                }
                 ObjectNode result = mapper.createObjectNode();
-                for (var entry : node.properties()) result.set(entry.getKey(), expandSchema(entry.getValue(), active, depth + 1));
-                if (result.path("nullable").asBoolean(false) && result.path("type").isTextual()) {
-                    String type = result.path("type").asText();
-                    result.remove("nullable");
-                    result.putArray("type").add(type).add("null");
-                }
-                return result;
+                for (var entry : node.properties()) result.set(entry.getKey(), rewriteSchema(entry.getValue(), active, depth + 1, bundle));
+                return normalizeNullable(result);
             }
             if (node.isArray()) {
                 var result = mapper.createArrayNode();
-                for (JsonNode child : node) result.add(expandSchema(child, active, depth + 1));
+                for (JsonNode child : node) result.add(rewriteSchema(child, active, depth + 1, bundle));
                 return result;
             }
             return node;
         }
+    }
+
+    private ObjectNode normalizeNullable(ObjectNode result) {
+        if (result.path("nullable").asBoolean(false) && result.path("type").isTextual()) {
+            String type = result.path("type").asText();
+            result.remove("nullable");
+            result.putArray("type").add(type).add("null");
+        }
+        return result;
+    }
+
+    private static final class SchemaBundle {
+        private final Map<String, String> names = new LinkedHashMap<>();
+        private final ArrayDeque<String> pending = new ArrayDeque<>();
+
+        private String name(String pointer) {
+            return names.computeIfAbsent(pointer, key -> {
+                pending.addLast(key);
+                return UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8)).toString();
+            });
+        }
+    }
+
+    private static final class SchemaExpansionLimit extends IllegalArgumentException {
+        private SchemaExpansionLimit(String message) { super(message); }
     }
 
     private record Contract(String name, String description, JsonNode request, JsonNode response, HttpOperation http) { }

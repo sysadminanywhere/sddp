@@ -206,6 +206,8 @@ The [0.2.0 release](https://github.com/sysadminanywhere/sddp/releases/tag/v0.2.0
 
 The [0.3.0 release](https://github.com/sysadminanywhere/sddp/releases/tag/v0.3.0) adds YAML upload, selection within large OpenAPI contracts, and stable Java names for external operation IDs. See the [import workflow](TECHNICAL.md#openapi-pilot) and [compatibility results](docs/OPENAPI_COMPATIBILITY.md).
 
+The `0.4.0-SNAPSHOT` development build adds contract comparison and explicit versioning on re-import, plus request serialization for the tested Stripe Customers and GitLab Issues operations.
+
 ### Core features
 - ✅ Project creation, viewing, listing, and deletion, plus CRUD for services, API operations, connections, and environments
 - ✅ Graph editor with validation & persistence

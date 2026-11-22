@@ -57,22 +57,71 @@ for _ in {1..60}; do
   sleep 1
 done
 start_app
+post_json() {
+  curl -qfsS -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:${port}/api/v1$1"
+}
+json_id() {
+  node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).id'
+}
 create_project() {
-  curl -qfsS -H 'Content-Type: application/json' -d "{\"name\":\"$1\"}" "http://127.0.0.1:${port}/api/v1/projects" |
-    node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).id'
+  printf '{"name":"%s"}' "$1" | post_json /projects | json_id
 }
 check_project() {
   [[ $(curl -qs -o "$null_output" -w '%{http_code}' "http://127.0.0.1:${port}/api/v1/projects/$1") == 200 ]]
 }
+seed_openapi_connection() {
+  local source_id target_id
+  source_id=$(printf '{"name":"store","serviceType":"CORE"}' | post_json "$project_api/services" | json_id)
+  target_id=$(printf '{"name":"orders","serviceType":"EXTERNAL"}' | post_json "$project_api/services" | json_id)
+  import_path="$project_api/services/$target_id/apis/openapi/import"
+  import_payload=$(node -e '
+    const document = JSON.parse(require("fs").readFileSync("docs/examples/orders.openapi.json", "utf8"));
+    process.stdout.write(JSON.stringify({ document, operations: ["GET /orders/{id}"] }));
+  ')
+  operation_id=$(printf '%s' "$import_payload" | post_json "$import_path" | node -p '
+    const { created, existing } = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    if (created.length !== 1 || existing.length) throw new Error("Expected one new OpenAPI operation");
+    created[0];
+  ')
+  [[ "$operation_id" =~ ^[0-9a-f-]{36}$ ]]
+  connection_id=$(printf '{"environment":"DEV","sourceServiceId":"%s","targetServiceId":"%s","targetApiId":"%s","transportType":"REST","connectionSettings":{"host":"orders","port":8080,"target_endpoint":"/"}}' \
+    "$source_id" "$target_id" "$operation_id" | post_json "$project_api/connections" | json_id)
+  [[ "$connection_id" =~ ^[0-9a-f-]{36}$ ]]
+}
+check_openapi_connection() {
+  curl -qfsS "http://127.0.0.1:${port}/api/v1$project_api/connections/$connection_id" | node -e '
+    const { environment, connection } = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    if (environment !== "DEV" || connection.id !== process.argv[1] || connection.targetApiId !== process.argv[2]) {
+      throw new Error("The original OpenAPI connection or target operation did not survive");
+    }
+  ' "$connection_id" "$operation_id"
+  printf '{"projectId":"%s","environment":"DEV","packageName":"upgrade","clientName":"OrdersClient"}' "$old_id" |
+    post_json /codegen/generate | node -e '
+      const java = JSON.parse(require("fs").readFileSync(0, "utf8")).files["OrdersClient.java"];
+      if (!java?.includes("public Object getOrder(") || !java.includes("HttpMethod.GET") || !java.includes("/orders/{id}")) {
+        throw new Error("Generated client did not retain the original OpenAPI method and path");
+      }
+    '
+  printf '%s' "$import_payload" | post_json "$import_path" | node -e '
+    const { created, existing } = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    if (created.length || existing.length !== 1 || existing[0] !== process.argv[1]) {
+      throw new Error("Re-import did not preserve the original OpenAPI operation ID");
+    }
+  ' "$operation_id"
+}
 old_id=$(create_project before-upgrade)
 [[ "$old_id" =~ ^[0-9a-f-]{36}$ ]]
+project_api="/projects/$old_id"
+seed_openapi_connection
 export IMAGE_NAME="$new_image"
 start_app
 check_project "$old_id"
+check_openapi_connection
 new_id=$(create_project after-upgrade)
 [[ "$new_id" =~ ^[0-9a-f-]{36}$ ]]
 export IMAGE_NAME="$old_image"
 start_app
 check_project "$old_id"
 check_project "$new_id"
-echo "Upgrade and rollback preserved projects (baseline: $base)"
+check_openapi_connection
+echo "Upgrade and rollback preserved projects, the OpenAPI connection, and generated client (baseline: $base)"

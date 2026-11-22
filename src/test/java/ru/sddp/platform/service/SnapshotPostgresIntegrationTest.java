@@ -11,6 +11,7 @@ import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 import javax.tools.ToolProvider;
 import java.net.URI;
@@ -36,6 +37,7 @@ import ru.sddp.platform.api.OpenApiModels;
 import ru.sddp.platform.api.TopologyRequests;
 import ru.sddp.platform.domain.ServiceType;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 import static org.junit.jupiter.api.Assertions.*;
 
 @EnabledIfEnvironmentVariable(named = "SDDP_POSTGRES_IT", matches = "true")
@@ -179,6 +181,137 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
             new OpenApiModels.PreviewRequest(null, yaml + "paths: {}\n", null)));
     }
 
+    @Test void previewsContractDriftAndKeepsConnectionsOnTheOriginalVersion() throws Exception {
+        var mapper = JsonMapper.builder().build();
+        var original = mapper.readTree(Files.readString(Path.of("docs/examples/orders.openapi.json")));
+        var project = projectService.create(new ApiModels.CreateProjectRequest("openapi-diff")).id();
+        var client = catalog.createService(project, new TopologyRequests.CreateServiceRequest("client", ServiceType.CORE, null));
+        var target = catalog.createService(project, new TopologyRequests.CreateServiceRequest("external", ServiceType.EXTERNAL, null));
+        var selection = List.of("POST /orders");
+        var old = openApi.importSelected(project, target.id(), new OpenApiModels.ImportRequest(original, selection)).created().getFirst();
+        var settings = mapper.createObjectNode().put("host", "127.0.0.1").put("port", 8081).put("target_endpoint", "/");
+        topology.addConnection(project, new TopologyRequests.CreateConnectionRequest("DEV",
+            client.id(), target.id(), null, old, "REST", settings, null), false);
+
+        var changed = original.deepCopy();
+        ((ObjectNode) changed.at("/components/schemas/CreateOrder/properties")).putObject("quantity").put("type", "integer");
+        ((ObjectNode) changed.at("/components/schemas/Order/properties")).remove("id");
+        var operation = openApi.preview(project, target.id(), new OpenApiModels.PreviewRequest(changed, null, selection))
+            .operations().getFirst();
+        assertTrue(operation.exists());
+        assertEquals("1.0.0", operation.comparison().baselineVersion());
+        assertEquals(Set.of(
+            new OpenApiModels.Change("/requestSchema/properties/quantity", OpenApiModels.Change.Kind.ADDED),
+            new OpenApiModels.Change("/responseSchema/properties/id", OpenApiModels.Change.Kind.REMOVED)),
+            Set.copyOf(operation.comparison().changes()));
+        assertThrows(CompatibilityViolationException.class, () ->
+            openApi.importSelected(project, target.id(), new OpenApiModels.ImportRequest(changed, selection)));
+        var request = new OpenApiModels.ImportRequest(changed, null, selection, "1.1.0");
+        var added = openApi.importSelected(project, target.id(), request).created().getFirst();
+        assertNotEquals(old, added);
+        assertEquals(List.of(added), openApi.importSelected(project, target.id(), request).existing());
+        assertFalse(catalog.getApi(project, target.id(), old).requestSchema().path("properties").has("quantity"));
+        assertTrue(catalog.getApi(project, target.id(), added).requestSchema().path("properties").has("quantity"));
+        assertFalse(ir.build(project, "DEV").services().stream().flatMap(service -> service.outbound_connections().stream())
+            .findFirst().orElseThrow().methods().getFirst().request_schema().path("properties").has("quantity"));
+    }
+
+    @Test void structuredOpenApiRequestsSurviveSnapshotsAndSendCorrectWireFormats(@TempDir Path directory) throws Exception {
+        var mapper = JsonMapper.builder().build();
+        var document = mapper.readTree("""
+            {
+              "openapi":"3.1.0", "info":{"version":"1"}, "paths":{
+                "/customers/{id}":{"get":{
+                  "operationId":"listCustomers",
+                  "parameters":[
+                    {"name":"id","in":"path","required":true,"schema":{"oneOf":[{"type":"string"},{"type":"integer"}]}},
+                    {"name":"created","in":"query","style":"deepObject","explode":true,
+                      "schema":{"anyOf":[{"type":"integer"},{"type":"object"}]}},
+                    {"name":"expand","in":"query","style":"deepObject","explode":true,
+                      "schema":{"type":"array","items":{"type":"string"}}},
+                    {"name":"labels","in":"query","style":"form","explode":false,"schema":{"type":"array","items":{"type":"string"}}},
+                    {"name":"not[labels]","in":"query","schema":{"type":"array","items":{"type":"string"}}}
+                  ],
+                  "responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Customer"}}}}}
+                }},
+                "/customers":{"post":{
+                  "operationId":"createCustomer",
+                  "requestBody":{"required":true,"content":{"application/x-www-form-urlencoded":{
+                    "schema":{"type":"object","properties":{"name":{"$ref":"#/components/schemas/Name","maxLength":42}}},
+                    "encoding":{"address":{"style":"deepObject","explode":true},"expand":{"style":"deepObject","explode":true}}
+                  }}},
+                  "responses":{"204":{"description":"No content"}}
+                }}
+              },
+              "components":{"schemas":{
+                "Name":{"type":"string"},
+                "Customer":{"type":"object","properties":{"parent":{"$ref":"#/components/schemas/Customer"}}}
+              }}
+            }
+            """);
+        var project = projectService.create(new ApiModels.CreateProjectRequest("openapi-wire")).id();
+        var source = catalog.createService(project, new TopologyRequests.CreateServiceRequest("internal", ServiceType.CORE, null));
+        var target = catalog.createService(project, new TopologyRequests.CreateServiceRequest("external", ServiceType.EXTERNAL, null));
+        var selection = List.of("GET /customers/{id}", "POST /customers");
+        var preview = openApi.preview(project, target.id(), document);
+        assertTrue(preview.warnings().isEmpty(), preview.warnings().toString());
+        var apis = openApi.importSelected(project, target.id(), new OpenApiModels.ImportRequest(document, selection)).created();
+        assertTrue(catalog.getApi(project, target.id(), apis.getFirst()).responseSchema().has("definitions"));
+        assertEquals(42, catalog.getApi(project, target.id(), apis.getLast()).requestSchema()
+            .at("/properties/name/allOf/1/maxLength").asInt());
+
+        var requests = new LinkedBlockingQueue<List<String>>();
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/customers", exchange -> {
+            try (exchange) {
+                String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                requests.add(List.of(exchange.getRequestMethod(), exchange.getRequestURI().toASCIIString(),
+                    Objects.toString(exchange.getRequestHeaders().getFirst("Content-Type"), ""), body));
+                byte[] result = "{}".getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, result.length);
+                exchange.getResponseBody().write(result);
+            }
+        });
+        server.start();
+        try {
+            var settings = mapper.createObjectNode().put("host", "127.0.0.1").put("port", server.getAddress().getPort())
+                .put("target_endpoint", "/").put("retries", 0);
+            for (UUID id : apis) {
+                topology.addConnection(project, new TopologyRequests.CreateConnectionRequest("DEV",
+                    source.id(), target.id(), null, id, "REST", settings, null), false);
+            }
+            var restored = importer.importSnapshot(mapper.valueToTree(exporter.export(project))).id();
+            var files = codegen.generate(new CodegenModels.GenerateRequest(restored, "DEV", "pilot", "Customers", null)).files();
+            compile(files, directory);
+            try (var loader = new URLClassLoader(new URL[]{directory.toUri().toURL()}, getClass().getClassLoader())) {
+                var get = generatedClass(files, loader, "listCustomers");
+                var reader = get.getConstructor(RestClient.Builder.class).newInstance(RestClient.builder());
+                get.getMethod("listCustomers", Map.class, Map.class).invoke(reader, Map.of("id", "a/b"),
+                    Map.of("created", Map.of("gte", 42), "expand", List.of("one", "two"),
+                        "labels", List.of("a,b", "c&d"), "not[labels]", List.of("first", "second")));
+                var post = generatedClass(files, loader, "createCustomer");
+                var creator = post.getConstructor(RestClient.Builder.class).newInstance(RestClient.builder());
+                post.getMethod("createCustomer", Object.class).invoke(creator,
+                    Map.of("name", "Ada + B", "address", Map.of("city", "New York"), "expand", List.of("default_source")));
+            }
+            var get = requests.remove();
+            assertEquals("GET", get.getFirst());
+            assertEquals("", get.getLast());
+            var uri = URI.create(get.get(1));
+            assertEquals("/customers/a%2Fb", uri.getRawPath());
+            assertEquals(Set.of("created%5Bgte%5D=42", "expand%5B%5D=one", "expand%5B%5D=two", "labels=a%2Cb,c%26d",
+                "not%5Blabels%5D=first", "not%5Blabels%5D=second"), Set.of(uri.getRawQuery().split("&")));
+            var post = requests.remove();
+            assertEquals(List.of("POST", "/customers"), post.subList(0, 2));
+            assertTrue(post.get(2).startsWith("application/x-www-form-urlencoded"), post.toString());
+            assertEquals(Set.of("name=Ada+%2B+B", "address%5Bcity%5D=New+York", "expand%5B%5D=default_source"),
+                Set.of(post.getLast().split("&")));
+        } finally {
+            server.stop(0);
+        }
+    }
+
     @Test void importsPromotesAndCallsBothOpenApiOperations(@TempDir Path directory) throws Exception {
         var mapper = JsonMapper.builder().build();
         var document = mapper.readTree(Files.readString(Path.of("docs/examples/orders.openapi.json")));
@@ -240,14 +373,7 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
                 .flatMap(connection -> connection.methods().stream()).filter(method -> method.http_operation() != null).count());
 
             var files = codegen.generate(new CodegenModels.GenerateRequest(restored, "PROD", "pilot", "OrdersClient", null)).files();
-            var compilerArgs = new ArrayList<>(List.of("-classpath", System.getProperty("java.class.path"),
-                "-d", directory.toString()));
-            for (var entry : files.entrySet()) {
-                var javaFile = directory.resolve(entry.getKey());
-                Files.writeString(javaFile, entry.getValue());
-                compilerArgs.add(javaFile.toString());
-            }
-            assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, compilerArgs.toArray(String[]::new)));
+            compile(files, directory);
             try (var loader = new URLClassLoader(new URL[]{directory.toUri().toURL()}, getClass().getClassLoader())) {
                 var readClient = generatedClass(files, loader, "getOrder");
                 var createClient = generatedClass(files, loader, "createOrder");
@@ -266,6 +392,16 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    private void compile(Map<String, String> files, Path directory) throws Exception {
+        var compilerArgs = new ArrayList<>(List.of("-classpath", System.getProperty("java.class.path"), "-d", directory.toString()));
+        for (var entry : files.entrySet()) {
+            var javaFile = directory.resolve(entry.getKey());
+            Files.writeString(javaFile, entry.getValue());
+            compilerArgs.add(javaFile.toString());
+        }
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, compilerArgs.toArray(String[]::new)));
     }
 
     private Class<?> generatedClass(Map<String, String> files, ClassLoader loader, String method) throws Exception {

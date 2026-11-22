@@ -159,5 +159,24 @@ async page => {
   const bulkApis = await receiveJson(await page.request.get(url(base + '/services/' + bulk.id + '/apis')));
   expect(bulkApis.length === 2 && bulkApis.some(operation => operation.httpOperation?.path === '/review'),
     'YAML import did not preserve both selected operations');
+
+  const changedYaml = "openapi: 3.0.3\ninfo:\n  version: '1'\npaths:\n"
+    + yamlOperation('/submit', 'post', 'submit').replace('204:', '202:');
+  await page.getByLabel('OpenAPI file (JSON or YAML)', { exact: true }).setInputFiles({
+    name: 'changed.yaml', mimeType: 'application/yaml', buffer: Buffer.from(changedYaml),
+  });
+  await page.getByRole('button', { name: 'Preview operations' }).click();
+  await page.getByText('Changes since version 1', { exact: true }).click();
+  await page.getByText('Changed /http/responseStatus', { exact: true }).waitFor();
+  await page.getByRole('checkbox', { name: /POST \/submit · submit/ }).check();
+  const importButton = page.getByRole('button', { name: 'Import selected operations' });
+  await importButton.click();
+  await page.getByText('Enter a new version for the selected contract changes.', { exact: true }).waitFor();
+  await page.getByLabel('New import version', { exact: true }).fill('2');
+  await importButton.click();
+  await page.getByText('Imported 1. Kept 0 existing operations.', { exact: true }).waitFor();
+  const versions = await receiveJson(await page.request.get(url(base + '/services/' + bulk.id + '/apis')));
+  expect(versions.filter(api => api.name === 'submit').map(api => api.version).sort().join(',') === '1,2',
+    'Changed OpenAPI contract did not preserve both versions');
   return 'SDDP browser release check passed';
 }
