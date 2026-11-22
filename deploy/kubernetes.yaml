@@ -6,7 +6,7 @@
 #       kubectl -n sddp create secret generic sddp-db --from-literal=password='<password>'
 #   - the application image pushed to a registry the cluster can pull from
 #
-# Replace CHANGE_ME/sddp:0.3.0 and the database URL, then:
+# Replace CHANGE_ME/sddp:0.4.0 and the database URL, then:
 #   kubectl create namespace sddp
 #   kubectl -n sddp apply -f deploy/kubernetes.yaml
 #
@@ -80,7 +80,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          image: docker.io/CHANGE_ME/sddp:0.3.0
+          image: docker.io/CHANGE_ME/sddp:0.4.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
