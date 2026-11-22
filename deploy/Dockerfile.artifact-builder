@@ -1,0 +1,16 @@
+FROM maven:3.9.9-eclipse-temurin-21 AS preload
+WORKDIR /app
+COPY pom.xml .
+COPY .mvn .mvn
+COPY src src
+ARG MAVEN_CENTRAL_URL=https://maven-central.storage-download.googleapis.com/maven2/
+RUN mvn -B "-Dmaven.central.url=$MAVEN_CENTRAL_URL" -DskipTests package \
+    dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=/opt/sddp/runtime
+
+FROM maven:3.9.9-eclipse-temurin-21
+COPY --from=preload /root/.m2/repository /opt/sddp/maven-repository
+COPY --from=preload /opt/sddp/runtime /opt/sddp/runtime
+COPY .mvn/settings.xml /opt/sddp/settings.xml
+WORKDIR /build
+ENTRYPOINT ["mvn", "-o", "-B", "-s", "/opt/sddp/settings.xml", "-Dmaven.repo.local=/opt/sddp/maven-repository", "-Dmaven.central.url=https://maven-central.storage-download.googleapis.com/maven2/"]
+CMD ["package"]

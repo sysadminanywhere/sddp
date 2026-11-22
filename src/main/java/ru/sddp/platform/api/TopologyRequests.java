@@ -23,6 +23,8 @@ public final class TopologyRequests {
                                           UUID sourceApiId, @NotNull UUID targetApiId, @NotBlank String transportType,
                                           @NotNull JsonNode connectionSettings, JsonNode mappingRules) { }
     public record UpdateConnectionMappingRequest(JsonNode mappingRules) { }
+    public record RebindTargetVersionRequest(@NotNull UUID expectedTargetApiId, @NotNull UUID targetApiId,
+                                             JsonNode mappingRules) { }
 
     public record CreateEnvironmentRequest(@NotBlank String code, @NotBlank String name, Integer position, Boolean isProtected) { }
     public record UpdateEnvironmentRequest(String code, @NotBlank String name, Integer position, Boolean isProtected) { }

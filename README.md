@@ -198,6 +198,7 @@ Each plugin Job has limits of 1 CPU, 512 MiB memory and 32 MiB ephemeral storage
 |----------|-------------|
 | [Technical Reference](TECHNICAL.md) | API reference, data model, configuration, deployment |
 | [Roadmap to 1.0](docs/ROADMAP_1.0.md) | Integration artifacts, isolated delivery, and transport plugins |
+| [Isolated Docker installation](docs/AIRGAP.md) | Transfer images and build Java artifacts without network access |
 
 ---
 

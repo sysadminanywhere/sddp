@@ -39,6 +39,14 @@ public class TopologyWriteController {
         return topology.updateConnectionMapping(projectId, connectionId, request.mappingRules(), confirmProtected);
     }
 
+    @PutMapping("/connections/{connectionId}/target-version")
+    public ApiModels.Edge rebindTargetVersion(@PathVariable UUID projectId, @PathVariable UUID connectionId,
+                                              @Valid @RequestBody TopologyRequests.RebindTargetVersionRequest request,
+                                              @RequestHeader(value = EnvironmentService.CONFIRM_HEADER, defaultValue = "false")
+                                              boolean confirmProtected) {
+        return topology.rebindTargetVersion(projectId, connectionId, request, confirmProtected);
+    }
+
     @DeleteMapping("/connections/{connectionId}") @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteConnection(@PathVariable UUID projectId, @PathVariable UUID connectionId,
                                  @RequestHeader(value = EnvironmentService.CONFIRM_HEADER, defaultValue = "false")

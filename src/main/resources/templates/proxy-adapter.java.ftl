@@ -92,7 +92,7 @@ public class ${client_name} {
         this.restClient = builder.requestFactory(requestFactory).baseUrl("${base_url}").build();
     }
     <#if http??>
-    public Object ${methods[0]}(<#if http.pathParameters?has_content>Map<String, ?> pathParameters</#if><#if http.queryParameters?has_content><#if http.pathParameters?has_content>, </#if>Map<String, ?> queryParameters</#if><#if http.hasBody><#if http.pathParameters?has_content || http.queryParameters?has_content>, </#if>Object request</#if>) {
+    public ${responseDto!"Object"} ${methods[0]}(<#if http.pathParameters?has_content>Map<String, ?> pathParameters</#if><#if http.queryParameters?has_content><#if http.pathParameters?has_content>, </#if>Map<String, ?> queryParameters</#if><#if http.hasBody><#if http.pathParameters?has_content || http.queryParameters?has_content>, </#if>${requestDto!"Object"} request</#if>) {
         var uri = UriComponentsBuilder.fromUriString("${base_url?j_string}").path("${target_endpoint?j_string}");
         Map<String, Object> values = new LinkedHashMap<>();
         <#list http.pathParameters as parameter>
@@ -238,7 +238,7 @@ public class ${client_name} {
     }
     </#if>
 
-    private Object executeRequest(URI endpoint, Object payload) {
+    private ${responseDto!"Object"} executeRequest(URI endpoint, Object payload) {
         for (int attempt = 0;; attempt++) {
             try {
                 var request = restClient.method(HttpMethod.${http.method}).uri(endpoint);
@@ -246,7 +246,7 @@ public class ${client_name} {
                 request.headers(headers -> headers.setBearerAuth(bearerToken));
                 </#if>
                 if (payload != null) request.contentType(MediaType.<#if http.formBody>APPLICATION_FORM_URLENCODED<#else>APPLICATION_JSON</#if>).body(payload);
-                return request.retrieve().body(Object.class);
+                return request.retrieve().body(${responseDto!"Object"}.class);
             } catch (ResourceAccessException e) {
                 if (attempt >= ${retries?c}) throw e;
             }

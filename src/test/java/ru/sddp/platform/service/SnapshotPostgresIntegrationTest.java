@@ -1,6 +1,7 @@
 package ru.sddp.platform.service;
 
 import com.sun.net.httpserver.HttpServer;
+import java.io.ByteArrayInputStream;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -12,7 +13,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.zip.ZipInputStream;
 import javax.tools.ToolProvider;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -52,6 +55,7 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
     @Autowired ConnectionPromotionService promotion;
     @Autowired IntermediateRepresentationBuilder ir;
     @Autowired CodeGenerationService codegen;
+    @Autowired JavaArtifactService artifacts;
     private static final String SCHEMA = "snapshot_test_" + UUID.randomUUID().toString().replace("-", "");
     private static final String URL = Objects.requireNonNullElse(System.getenv("SddP_DB_URL"), "jdbc:postgresql://localhost:5432/sddp");
     private static final String USER = Objects.requireNonNullElse(System.getenv("SddP_DB_USERNAME"), "sddp");
@@ -190,8 +194,13 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
         var selection = List.of("POST /orders");
         var old = openApi.importSelected(project, target.id(), new OpenApiModels.ImportRequest(original, selection)).created().getFirst();
         var settings = mapper.createObjectNode().put("host", "127.0.0.1").put("port", 8081).put("target_endpoint", "/");
-        topology.addConnection(project, new TopologyRequests.CreateConnectionRequest("DEV",
-            client.id(), target.id(), null, old, "REST", settings, null), false);
+        var mapping = mapper.readTree("""
+            {"target_api":"createOrder v1.0.0",
+             "transformations":[{"type":"HARDCODED_VALUE","to":"$.productCode","value":"SKU-1"}]}
+            """);
+        var connection = topology.addConnection(project, new TopologyRequests.CreateConnectionRequest("DEV",
+            client.id(), target.id(), null, old, "REST", settings, mapping), false);
+        assertEquals(1, promotion.copy(project, new TopologyRequests.CopyConnectionsRequest("DEV", "PROD", "MERGE"), true).copied());
 
         var changed = original.deepCopy();
         ((ObjectNode) changed.at("/components/schemas/CreateOrder/properties")).putObject("quantity").put("type", "integer");
@@ -214,6 +223,22 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
         assertTrue(catalog.getApi(project, target.id(), added).requestSchema().path("properties").has("quantity"));
         assertFalse(ir.build(project, "DEV").services().stream().flatMap(service -> service.outbound_connections().stream())
             .findFirst().orElseThrow().methods().getFirst().request_schema().path("properties").has("quantity"));
+        var invalid = mapper.readTree("""
+            {"target_api":"createOrder v1.1.0",
+             "transformations":[{"type":"HARDCODED_VALUE","to":"$.quantity","value":"not an integer"}]}
+            """);
+        assertThrows(CompatibilityViolationException.class, () -> topology.rebindTargetVersion(project, connection.id(),
+            new TopologyRequests.RebindTargetVersionRequest(old, added, invalid), false));
+        var moved = topology.rebindTargetVersion(project, connection.id(),
+            new TopologyRequests.RebindTargetVersionRequest(old, added, null), false);
+        assertEquals(added, moved.targetApiId());
+        assertEquals("createOrder v1.1.0", moved.mappingRules().path("target_api").asText());
+        assertTrue(ir.build(project, "DEV").services().stream().flatMap(service -> service.outbound_connections().stream())
+            .findFirst().orElseThrow().methods().getFirst().request_schema().path("properties").has("quantity"));
+        assertFalse(ir.build(project, "PROD").services().stream().flatMap(service -> service.outbound_connections().stream())
+            .findFirst().orElseThrow().methods().getFirst().request_schema().path("properties").has("quantity"));
+        assertThrows(CompatibilityViolationException.class, () -> topology.rebindTargetVersion(project, connection.id(),
+            new TopologyRequests.RebindTargetVersionRequest(old, added, null), false));
     }
 
     @Test void structuredOpenApiRequestsSurviveSnapshotsAndSendCorrectWireFormats(@TempDir Path directory) throws Exception {
@@ -389,6 +414,40 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
             var sent = requests.remove();
             assertEquals(List.of("POST", "/orders"), sent.subList(0, 2));
             assertEquals(mapper.readTree("{\"productCode\":\"SKU-1\"}"), mapper.readTree(sent.get(2)));
+
+            var artifactRequest = new CodegenModels.ArtifactRequest(restored, "PROD", "pilot", "Orders", "1.0");
+            byte[] artifact = artifacts.build(artifactRequest);
+            assertArrayEquals(artifact, artifacts.build(artifactRequest), "Archive should be reproducible for a restored project");
+            var entries = new TreeMap<String, byte[]>();
+            try (var zip = new ZipInputStream(new ByteArrayInputStream(artifact))) {
+                for (var entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
+                    entries.put(entry.getName(), zip.readAllBytes());
+                }
+            }
+            var metadata = mapper.readTree(entries.get("sddp-artifact.json"));
+            assertEquals("PROD", metadata.path("environment").asText());
+            assertEquals("1.0", metadata.path("version").asText());
+            assertEquals(2, metadata.path("contracts").size());
+            assertEquals("1.0.0", metadata.path("contracts").get(0).path("version").asText());
+            assertTrue(entries.containsKey("SHA256SUMS"));
+            assertTrue(entries.containsKey("pom.xml"));
+            var artifactSources = new TreeMap<String, String>();
+            for (var entry : entries.entrySet()) {
+                if (entry.getKey().endsWith(".java")) artifactSources.put(Path.of(entry.getKey()).getFileName().toString(),
+                    new String(entry.getValue(), StandardCharsets.UTF_8));
+            }
+            assertEquals(4, artifactSources.size(), "Both Java clients should have response DTOs");
+            compile(artifactSources, directory);
+            try (var loader = new URLClassLoader(new URL[]{directory.toUri().toURL()}, getClass().getClassLoader())) {
+                String clientFile = artifactSources.entrySet().stream().filter(entry -> entry.getValue().contains("getOrder(Map"))
+                    .findFirst().orElseThrow().getKey();
+                var client = loader.loadClass("pilot." + clientFile.replace(".java", ""));
+                var instance = client.getConstructor(RestClient.Builder.class).newInstance(RestClient.builder());
+                var dto = client.getMethod("getOrder", Map.class, Map.class)
+                    .invoke(instance, Map.of("id", "typed"), Map.of());
+                assertTrue(dto.getClass().isRecord());
+                assertEquals("test-order", dto.getClass().getMethod("id").invoke(dto));
+            }
         } finally {
             server.stop(0);
         }

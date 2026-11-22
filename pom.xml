@@ -10,7 +10,7 @@
     </parent>
     <groupId>ru.sddp.platform</groupId>
     <artifactId>sddp-core-backend</artifactId>
-    <version>0.4.0</version>
+    <version>0.5.0-SNAPSHOT</version>
     <name>sddp-core-backend</name>
     <properties>
         <java.version>21</java.version>
@@ -20,6 +20,7 @@
         <jackson-bom.version>3.1.8</jackson-bom.version>
         <jackson-2-bom.version>2.21.8</jackson-2-bom.version>
         <bouncycastle.version>1.87</bouncycastle.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
         <docker.java.version>3.7.1</docker.java.version>
         <kubernetes.client.version>28.0.0</kubernetes.client.version>
     </properties>
@@ -55,9 +56,29 @@
         <dependency><groupId>org.bouncycastle</groupId><artifactId>bcpkix-jdk18on</artifactId><version>${bouncycastle.version}</version></dependency>
         <dependency><groupId>org.bouncycastle</groupId><artifactId>bcprov-jdk18on</artifactId><version>${bouncycastle.version}</version></dependency>
         <dependency><groupId>org.bouncycastle</groupId><artifactId>bcutil-jdk18on</artifactId><version>${bouncycastle.version}</version></dependency>
-        <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-circuitbreaker</artifactId><version>2.4.0</version></dependency>
+        <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-circuitbreaker</artifactId><version>${resilience4j.version}</version></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
         <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
     </dependencies>
-    <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals><goal>build-info</goal></goals>
+                        <configuration>
+                            <time>off</time>
+                            <additionalProperties>
+                                <spring-boot-version>${project.parent.version}</spring-boot-version>
+                                <jackson-2-version>${jackson-2-bom.version}</jackson-2-version>
+                                <resilience4j-version>${resilience4j.version}</resilience4j-version>
+                            </additionalProperties>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
