@@ -13,6 +13,15 @@ bash scripts/package-airgap.sh sddp-airgap sddp pilot sddp-maven-builder:pilot
 
 Transfer the kit and the topology snapshot through the approved channel. Build the images for the operating system and architecture of the isolated Docker host.
 
+For the Kafka pilot, include the generator and the broker image if the isolated environment needs a broker. The kit records all transferred image tags in `images.txt`.
+
+```bash
+docker build -t sddp-kafka-plugin:pilot plugins/kafka
+docker pull apache/kafka:4.1.2
+bash scripts/package-airgap.sh sddp-airgap-kafka sddp pilot sddp-maven-builder:pilot \
+  postgres:16-alpine sddp-kafka-plugin:pilot apache/kafka:4.1.2
+```
+
 ## Install in the isolated environment
 
 ```bash
@@ -37,6 +46,22 @@ docker run --rm --pull never --network none --user "$(id -u):$(id -g)" -e HOME=/
 ```
 
 Use the Maven builder tag recorded in the kit's `images.env`. Deploy the JAR with the application's pinned Java dependencies. The generated client connects to the target configured for the selected environment. Supply runtime credentials to the consuming application. Topology fields and mapping constants belong to the project snapshot and may appear in generated source, so keep credentials and working payloads in the consuming system.
+
+## Build and run the Kafka clients
+
+Import the Orders events snapshot and export DEV IR with `POST /api/v1/projects/{projectId}/ir?environment=DEV`. Save the response as `ir.json` in the current directory. The Kafka connections in the snapshot must contain the address reachable from the consuming application and the topics from the AsyncAPI contract.
+
+```bash
+mkdir -p kafka-client/classes
+docker run --rm --pull never --network none --user "$(id -u):$(id -g)" \
+  -v "$PWD/ir.json:/input/ir.json:ro" -v "$PWD/kafka-client:/output" \
+  sddp-kafka-plugin:pilot plugin /input/ir.json /output
+docker run --rm --pull never --network none --user "$(id -u):$(id -g)" --entrypoint javac \
+  -v "$PWD/kafka-client:/build" sddp-maven-builder:pilot -cp '/opt/sddp/runtime/*' \
+  -d /build/classes /build/Kafka_publishOrderCreated.java /build/Kafka_receiveOrderCreated.java
+```
+
+Create the `orders.created` topic on the isolated broker. Add the compiled classes and pinned Kafka and Jackson runtime dependencies to the consumer application's classpath. Use `publishOrderCreated` and `receiveOrderCreated` to send and confirm the Orders event. The pilot uses plaintext on the test network. The isolated acceptance script includes the broker configuration and a runnable Java example in `scripts/test-airgap-install.sh`.
 
 ## Update and restore
 
