@@ -33,7 +33,7 @@ async page => {
   const sourceApi = await addApi(source, 'sendOrder', 'orderId');
   await page.goto(url('/service.html?projectId=' + project.id + '&serviceId=' + target.id));
   await page.getByText('Import OpenAPI', { exact: true }).click();
-  await page.getByRole('button', { name: 'OpenAPI JSON file' }).setInputFiles('docs/examples/orders.openapi.json');
+  await page.getByLabel('OpenAPI file (JSON or YAML)', { exact: true }).setInputFiles('docs/examples/orders.openapi.json');
   await page.getByRole('button', { name: 'Preview operations' }).click();
   await page.getByRole('checkbox', { name: 'GET /orders/{id} · getOrder' }).waitFor();
   await page.getByRole('checkbox', { name: 'POST /orders · createOrder' }).waitFor();
@@ -130,5 +130,34 @@ async page => {
   expect(java?.includes('/orders') && java.includes('$.productCode') && java.includes('$.orderId'),
     'The generated client did not use the promoted endpoint and mapping');
   await page.locator('#codegenResult').getByText('GeneratedClient.java', { exact: true }).waitFor();
+
+  const bulk = await post(base + '/services', { name: 'bulk', serviceType: 'EXTERNAL' });
+  await page.goto(url('/service.html?projectId=' + project.id + '&serviceId=' + bulk.id));
+  await page.getByText('Import OpenAPI', { exact: true }).click();
+  const yamlOperation = (path, method, name) =>
+    `  ${path}:\n    ${method}:\n      operationId: ${name}\n      responses:\n        204:\n          description: No content\n`;
+  const yaml = "openapi: 3.0.3\ninfo:\n  version: '1'\npaths:\n"
+    + Array.from({ length: 200 }, (_, i) => yamlOperation('/bulk/' + i, 'get', 'bulk' + i)).join('')
+    + yamlOperation('/review', 'get', 'reviews/list')
+    + yamlOperation('/submit', 'post', 'submit');
+  await page.getByLabel('OpenAPI file (JSON or YAML)', { exact: true }).setInputFiles({
+    name: 'bulk.yaml', mimeType: 'application/yaml', buffer: Buffer.from(yaml),
+  });
+  await page.getByRole('button', { name: 'Preview operations' }).click();
+  const filter = page.getByRole('searchbox', { name: 'Filter by method, path, or name' });
+  await filter.fill('/review');
+  await page.getByRole('checkbox', { name: /^GET \/review · op_reviews_list_/ }).check();
+  await filter.fill('/submit');
+  await page.getByRole('checkbox', { name: 'POST /submit · submit' }).check();
+  const validate = page.getByRole('button', { name: 'Validate selected operations' });
+  await validate.click();
+  await page.getByRole('button', { name: 'Change selection' }).click();
+  expect(await page.locator('#openApiOperations input:checked').count() === 2, 'Filtering or back lost selected operations');
+  await validate.click();
+  await page.getByRole('button', { name: 'Import selected operations' }).click();
+  await page.getByRole('link', { name: 'submit', exact: true }).waitFor();
+  const bulkApis = await receiveJson(await page.request.get(url(base + '/services/' + bulk.id + '/apis')));
+  expect(bulkApis.length === 2 && bulkApis.some(operation => operation.httpOperation?.path === '/review'),
+    'YAML import did not preserve both selected operations');
   return 'SDDP browser release check passed';
 }

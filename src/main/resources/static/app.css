@@ -207,6 +207,7 @@ button.link {
 button.link:hover { text-decoration: underline; filter: none; }
 
 .button-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+#openApiOperations { max-block-size: 22rem; overflow: auto; }
 
 .button-link {
   display: inline-flex;

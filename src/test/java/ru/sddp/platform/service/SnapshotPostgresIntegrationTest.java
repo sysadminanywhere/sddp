@@ -102,6 +102,83 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
         assertEquals(400, client.send(atLimit, HttpResponse.BodyHandlers.ofString()).statusCode());
     }
 
+    @Test void validatesAndImportsSelectedOperationsFromLargeContracts() {
+        var mapper = JsonMapper.builder().build();
+        var project = projectService.create(new ApiModels.CreateProjectRequest("openapi-large")).id();
+        var target = catalog.createService(project, new TopologyRequests.CreateServiceRequest("external", ServiceType.EXTERNAL, null));
+        var document = mapper.createObjectNode().put("openapi", "3.0.3");
+        document.putObject("info").put("version", "1");
+        var paths = document.putObject("paths");
+        for (int i = 0; i < 200; i++) {
+            paths.putObject("/invalid/" + i).putObject("get").putObject("responses").putObject("200")
+                .put("$ref", "#/missing");
+        }
+        paths.putObject("/items").putObject("get").put("operationId", "list/items").putObject("responses")
+            .putObject("204").put("description", "No content");
+        paths.putObject("/other").putObject("get").put("operationId", "list-items").putObject("responses")
+            .putObject("204").put("description", "No content");
+        paths.putObject("/legacy").putObject("get").put("operationId", "list_items").putObject("responses")
+            .putObject("204").put("description", "No content");
+        var inventory = openApi.preview(project, target.id(), document);
+        assertTrue(inventory.selectionRequired());
+        assertEquals(203, inventory.operations().size());
+        assertTrue(inventory.warnings().isEmpty());
+
+        var keys = List.of("GET /legacy", "GET /other", "GET /items");
+        var preview = openApi.preview(project, target.id(), new OpenApiModels.PreviewRequest(document, null, keys));
+        assertFalse(preview.selectionRequired());
+        assertTrue(preview.warnings().isEmpty());
+        assertEquals(keys, preview.operations().stream().map(OpenApiModels.Operation::key).toList());
+        assertEquals("list_items", preview.operations().getFirst().name());
+        assertEquals(3, preview.operations().stream().map(OpenApiModels.Operation::name).distinct().count());
+        assertThrows(IllegalArgumentException.class, () -> openApi.importSelected(project, target.id(),
+            new OpenApiModels.ImportRequest(document, List.of("GET /items", "GET /invalid/1"))));
+        assertTrue(catalog.listApis(project, target.id()).isEmpty());
+        var selected = new OpenApiModels.ImportRequest(document, keys);
+        var imported = openApi.importSelected(project, target.id(), selected);
+        assertEquals(3, imported.created().size());
+        var repeated = openApi.importSelected(project, target.id(), new OpenApiModels.ImportRequest(document, keys.reversed()));
+        assertEquals(imported.created().reversed(), repeated.existing());
+        assertTrue(repeated.created().isEmpty());
+    }
+
+    @Test void importsYamlAndRejectsAmbiguousDocuments() {
+        var project = projectService.create(new ApiModels.CreateProjectRequest("openapi-yaml")).id();
+        var target = catalog.createService(project, new TopologyRequests.CreateServiceRequest("external", ServiceType.EXTERNAL, null));
+        var yaml = """
+            openapi: 3.0.3
+            info:
+              version: '1'
+            paths:
+              /items:
+                get:
+                  operationId: list/items
+                  responses:
+                    200:
+                      $ref: '#/components/responses/Items'
+            components:
+              responses:
+                Items:
+                  description: Items
+                  content:
+                    application/json:
+                      schema:
+                        type: array
+                        items:
+                          type: string
+            """;
+        var keys = List.of("GET /items");
+        var preview = openApi.preview(project, target.id(), new OpenApiModels.PreviewRequest(null, yaml, keys));
+        assertEquals(keys, preview.operations().stream().map(OpenApiModels.Operation::key).toList());
+        var imported = openApi.importSelected(project, target.id(), new OpenApiModels.ImportRequest(null, yaml, keys));
+        assertEquals(1, imported.created().size());
+        assertEquals("array", catalog.getApi(project, target.id(), imported.created().getFirst()).responseSchema().path("type").asText());
+        assertThrows(IllegalArgumentException.class, () -> openApi.preview(project, target.id(),
+            new OpenApiModels.PreviewRequest(null, yaml + "---\npaths: {}\n", null)));
+        assertThrows(IllegalArgumentException.class, () -> openApi.preview(project, target.id(),
+            new OpenApiModels.PreviewRequest(null, yaml + "paths: {}\n", null)));
+    }
+
     @Test void importsPromotesAndCallsBothOpenApiOperations(@TempDir Path directory) throws Exception {
         var mapper = JsonMapper.builder().build();
         var document = mapper.readTree(Files.readString(Path.of("docs/examples/orders.openapi.json")));

@@ -133,13 +133,7 @@ Base path: `/api/v1`
 
 ### Code Generation
 
-### OpenAPI pilot
-
-Open a service, expand **Import OpenAPI**, choose the [orders contract](docs/examples/orders.openapi.json), and preview the operations. Select the operations to add and confirm the import. The import uses `info.version` as the API version and preserves any existing operation with the same name and version.
-
-The importer reads OpenAPI 3.0 and 3.1 JSON, expands local references, and supports JSON bodies, scalar path and query parameters with default serialization, and the first declared successful JSON response by status code. Preview reports unsupported operations. External references, recursive schemas and YAML input are outside the current import subset. Configure host, port, and security on the connection for each environment.
-
-Imported REST methods carry `http_operation` in the IR. Its method, path, body flags, and declared parameters are preserved by snapshot v1. The client uses the contract path when the connection endpoint is `/`. A customized endpoint must keep the same path placeholders. Generated methods take maps for the declared path and query parameters and a Java object when the operation accepts a JSON body. Mapping rules apply to the JSON body. Existing connections without this metadata continue to send POST.
+See [OpenAPI pilot](#openapi-pilot) for importing operations and generating clients from them.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -287,9 +281,13 @@ Each environment includes its code, display name, order and protection flag. Ser
 
 ### OpenAPI pilot
 
-Open a service, expand **Import OpenAPI**, choose the [orders contract](docs/examples/orders.openapi.json), and preview the operations. Select the operations to add and confirm the import. The import uses `info.version` as the API version and preserves any existing operation with the same name and version.
+Open a service, expand **Import OpenAPI**, choose a JSON or YAML contract, and preview the operations. For contracts with up to 200 operations, such as the [orders example](docs/examples/orders.openapi.json), preview validates the entire contract. For larger contracts, filter the list, select up to 200 operations, and validate the selection. Then select the validated operations to import.
 
-The importer reads OpenAPI 3.0 and 3.1 JSON, expands local references, and supports JSON bodies, scalar path and query parameters with default serialization, and the first declared successful JSON response by status code. Preview reports unsupported operations. External references, recursive schemas and YAML input are outside the current import subset. Configure host, port, and security on the connection for each environment.
+The import uses `info.version` as the API version and preserves any existing operation with the same name and version. Java-compatible names retain their spelling. Other operation IDs map to Java names with a stable suffix derived from the HTTP method and path. The preview reports duplicate names.
+
+The importer reads OpenAPI 3.0 and 3.1, expands local references, and supports JSON bodies, scalar path and query parameters with default serialization, and the first declared successful JSON response by status code. Validation reports unsupported operations. Use a bundled contract when the source uses external references. Recursive schemas and YAML aliases are outside the current import subset. Configure host, port, and security on the connection for each environment.
+
+The preview and import endpoints under `/api/v1/projects/{projectId}/services/{serviceId}/apis/openapi` accept either a `document` JSON object or a `yaml` string. Preview without an `operations` array validates up to 200 operations. For larger contracts it returns up to 10,000 candidate operations with `selectionRequired: true`. Send the document again with an `operations` array of up to 200 keys such as `GET /orders/{id}` to validate or import the selection. The configured request-body limit also applies.
 
 Imported REST methods carry `http_operation` in the IR. Its method, path, body flags, and declared parameters are preserved by snapshot v1. The client uses the contract path when the connection endpoint is `/`. A customized endpoint must keep the same path placeholders. Generated methods take maps for the declared path and query parameters and a Java object when the operation accepts a JSON body. Mapping rules apply to the JSON body. Existing connections without this metadata continue to send POST.
 

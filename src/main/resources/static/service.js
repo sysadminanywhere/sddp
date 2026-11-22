@@ -11,7 +11,9 @@
   let service = null;
   let apis = [];
   let topology = { nodes: [], edges: [] };
-  let openApiDocument = null;
+  let openApiSource = null;
+  let openApiCatalog = null;
+  let openApiSelection = new Set();
 
   function nodeName(id) {
     return topology.nodes.find(node => node.id === id)?.name || id;
@@ -134,13 +136,26 @@
   }
 
   function resetOpenApiPreview() {
-    openApiDocument = null;
+    openApiSource = null;
+    openApiCatalog = null;
+    openApiSelection.clear();
     byId('openApiImportForm').hidden = true;
     byId('openApiWarnings').hidden = true;
+    byId('openApiSearch').hidden = true;
+    byId('openApiBack').hidden = true;
+    byId('openApiFilter').value = '';
     byId('openApiStatus').textContent = '';
   }
 
+  function filterOpenApiOperations() {
+    const query = byId('openApiFilter').value.trim().toLowerCase();
+    for (const row of byId('openApiOperations').children) {
+      row.hidden = !row.textContent.toLowerCase().includes(query);
+    }
+  }
+
   function renderOpenApiPreview(preview) {
+    const catalog = preview.selectionRequired;
     const warnings = byId('openApiWarnings');
     warnings.replaceChildren(...preview.warnings.map(warning => {
       const item = document.createElement('li');
@@ -148,7 +163,7 @@
       return item;
     }));
     warnings.hidden = preview.warnings.length === 0;
-    byId('openApiStatus').textContent = t('openapi.previewResult', {
+    byId('openApiStatus').textContent = t(catalog ? 'openapi.catalogResult' : 'openapi.previewResult', {
       version: preview.version, count: preview.operations.length,
     });
     byId('openApiOperations').replaceChildren(...preview.operations.map((operation, index) => {
@@ -159,7 +174,7 @@
       checkbox.name = 'operations';
       checkbox.id = 'openapi-operation-' + index;
       checkbox.value = operation.key;
-      checkbox.checked = !operation.exists;
+      checkbox.checked = catalog ? openApiSelection.has(operation.key) : !operation.exists || openApiSelection.has(operation.key);
       label.htmlFor = checkbox.id;
       label.textContent = operation.method + ' ' + operation.path + ' · ' + operation.name
         + (operation.exists ? ' · ' + t('openapi.existing') : '');
@@ -168,50 +183,88 @@
       return row;
     }));
     byId('openApiImportForm').hidden = preview.operations.length === 0;
+    byId('openApiSearch').hidden = !catalog;
+    byId('openApiCheck').hidden = !catalog;
+    byId('openApiImport').hidden = catalog;
+    byId('openApiBack').hidden = catalog || !openApiCatalog;
+    if (catalog) {
+      filterOpenApiOperations();
+      byId('openApiFilter').focus();
+    } else if (preview.operations.length > 0) {
+      byId('openApiOperationsLabel').focus();
+    } else if (openApiCatalog) {
+      byId('openApiBack').focus();
+    }
+  }
+
+  async function readOpenApiFile(file) {
+    const text = await file.text();
+    if (/\.ya?ml$/i.test(file.name)) return { yaml: text };
+    try {
+      return { document: JSON.parse(text) };
+    } catch {
+      throw new Error(t('openapi.invalidFile'));
+    }
   }
 
   function bindOpenApi() {
     const fileInput = byId('openApiFile');
+    const previewForm = byId('openApiPreviewForm');
+    const previewUrl = () => new URL(previewForm.action).pathname;
+    const previewButton = byId('openApiPreview');
     fileInput.addEventListener('change', resetOpenApiPreview);
-    byId('openApiPreviewForm').addEventListener('submit', async event => {
+    byId('openApiFilter').addEventListener('input', filterOpenApiOperations);
+    byId('openApiBack').addEventListener('click', () => renderOpenApiPreview(openApiCatalog));
+    previewForm.addEventListener('submit', async event => {
       event.preventDefault();
-      const form = event.currentTarget;
+      if (previewButton.disabled) return;
       const file = fileInput.files[0];
-      const button = byId('openApiPreview');
       resetOpenApiPreview();
-      button.disabled = true;
+      previewButton.disabled = true;
+      fileInput.disabled = true;
       try {
-        let document;
-        try {
-          document = JSON.parse(await file.text());
-        } catch {
-          throw new Error(t('openapi.invalidFile'));
-        }
-        const preview = await api(new URL(form.action).pathname, { method: 'POST', body: { document } });
-        if (fileInput.files[0] !== file) return;
-        openApiDocument = document;
+        const source = await readOpenApiFile(file);
+        const preview = await api(previewUrl(), { method: 'POST', body: source });
+        openApiSource = source;
+        if (preview.selectionRequired) openApiCatalog = preview;
         renderOpenApiPreview(preview);
       } catch (error) {
-        if (fileInput.files[0] === file) byId('openApiStatus').textContent = error.message;
+        byId('openApiStatus').textContent = error.message;
       } finally {
-        button.disabled = false;
+        previewButton.disabled = false;
+        fileInput.disabled = false;
       }
     });
 
     byId('openApiImportForm').addEventListener('submit', async event => {
       event.preventDefault();
+      if (previewButton.disabled) return;
       const form = event.currentTarget;
       const operations = new FormData(form).getAll('operations');
-      if (!openApiDocument || operations.length === 0) {
+      if (!openApiSource || operations.length === 0) {
         byId('openApiStatus').textContent = t('openapi.selectOperation');
         return;
       }
-      const button = byId('openApiImport');
+      if (operations.length > 200) {
+        byId('openApiStatus').textContent = t('openapi.selectionLimit');
+        return;
+      }
+      const validating = !byId('openApiCheck').hidden;
+      const button = byId(validating ? 'openApiCheck' : 'openApiImport');
       button.disabled = true;
+      previewButton.disabled = true;
       fileInput.disabled = true;
+      byId('openApiBack').disabled = true;
       try {
+        const body = { ...openApiSource, operations };
+        if (validating) {
+          const preview = await api(previewUrl(), { method: 'POST', body });
+          openApiSelection = new Set(operations);
+          renderOpenApiPreview(preview);
+          return;
+        }
         const result = await api(new URL(form.action).pathname, {
-          method: 'POST', body: { document: openApiDocument, operations },
+          method: 'POST', body,
         });
         resetOpenApiPreview();
         byId('openApiStatus').textContent = t('openapi.importResult', {
@@ -222,7 +275,9 @@
         byId('openApiStatus').textContent = error.message;
       } finally {
         button.disabled = false;
+        previewButton.disabled = false;
         fileInput.disabled = false;
+        byId('openApiBack').disabled = false;
       }
     });
   }
