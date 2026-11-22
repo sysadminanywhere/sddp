@@ -7,7 +7,7 @@ esac
 
 suffix="$$${RANDOM}"
 project="sddptest${suffix}"
-export IMAGE_NAME="sddp-test-${suffix}"
+export IMAGE_NAME="${SDDP_TEST_PUBLISHED_IMAGE:-sddp-test-${suffix}}"
 export POSTGRES_PASSWORD="sddp-test-${suffix}"
 export SDDP_DOMAIN=localhost:18443 SDDP_USER=Bob
 export SDDP_PASSWORD_HASH='$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG'
@@ -23,13 +23,27 @@ browser_started=0
 cleanup() {
   if [[ "$browser_started" == 1 ]]; then "${browser[@]}" close >/dev/null 2>&1 || true; fi
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  docker image rm "${IMAGE_NAME}:latest" >/dev/null 2>&1 || true
+  if [[ -z "${SDDP_TEST_PUBLISHED_IMAGE:-}" ]]; then
+    docker image rm "${IMAGE_NAME}:latest" >/dev/null 2>&1 || true
+  fi
   rm -f "$tmp/snapshot.json" "$tmp/backup.dump"
   rmdir "$tmp" 2>/dev/null || true
 }
 trap cleanup EXIT
 
-"${compose[@]}" up -d --build
+if [[ -n "${SDDP_TEST_PUBLISHED_IMAGE:-}" ]]; then
+  : "${IMAGE_TAG:?Set the published image tag}"
+  : "${SDDP_TEST_PUBLISHED_REVISION:?Set the expected image revision}"
+  "${compose[@]}" up -d --no-build --pull always
+  app=$("${compose[@]}" ps -q app)
+  image=$(docker inspect --format '{{.Image}}' "$app")
+  revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
+  version=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image")
+  [[ "$revision" == "$SDDP_TEST_PUBLISHED_REVISION" && "$version" == "$IMAGE_TAG" ]]
+  printf 'Verified image version %s at revision %s\n' "$version" "$revision"
+else
+  "${compose[@]}" up -d --build
+fi
 port=$("${compose[@]}" port gateway 18443)
 port=${port##*:}
 request() {
