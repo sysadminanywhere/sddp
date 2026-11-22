@@ -300,6 +300,12 @@ The artifact generator uses Java records for flat JSON objects whose property na
 
 To move an existing connection, send `PUT /api/v1/projects/{projectId}/connections/{connectionId}/target-version` with `expectedTargetApiId` and `targetApiId`. The target must be another version of the same operation. Provide `mappingRules` to replace the current mapping during this update. The endpoint checks destination paths, declared scalar or collection types, and required top-level fields. It honors protected-environment confirmation and modifies only the selected connection.
 
+### AsyncAPI Kafka pilot
+
+Send an AsyncAPI 3.0.0 JSON document and an array of operation names as `{document, operations}` to `POST /api/v1/projects/{projectId}/services/{serviceId}/apis/asyncapi/import`. The pilot imports one JSON payload per selected send or receive operation and uses `info.version` as its version. See the [Orders events contract](docs/examples/orders-events.asyncapi.json).
+
+Bind each event operation to a Kafka connection. The broker address comes from the connection host and port and the topic comes from the selected AsyncAPI channel. The binding is stored in snapshot v1 and appears in the IR as `event_operation`. The pilot plugin in `plugins/kafka` generates Java Kafka producers and consumers for flat scalar JSON payloads and plaintext brokers in an isolated test environment.
+
 Template: `src/main/resources/templates/proxy-adapter.java.ftl`
 
 Produces per-connection Java class with:

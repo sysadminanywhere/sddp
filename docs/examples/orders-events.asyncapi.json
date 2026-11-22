@@ -1,0 +1,40 @@
+{
+  "asyncapi": "3.0.0",
+  "info": { "title": "Orders events pilot", "version": "1.0.0" },
+  "defaultContentType": "application/json",
+  "servers": { "local": { "host": "kafka:9092", "protocol": "kafka" } },
+  "channels": {
+    "orderEvents": {
+      "address": "orders.created",
+      "servers": [{ "$ref": "#/servers/local" }],
+      "messages": { "orderCreated": { "$ref": "#/components/messages/orderCreated" } }
+    }
+  },
+  "operations": {
+    "publishOrderCreated": {
+      "action": "send",
+      "channel": { "$ref": "#/channels/orderEvents" },
+      "messages": [{ "$ref": "#/channels/orderEvents/messages/orderCreated" }]
+    },
+    "receiveOrderCreated": {
+      "action": "receive",
+      "channel": { "$ref": "#/channels/orderEvents" },
+      "messages": [{ "$ref": "#/channels/orderEvents/messages/orderCreated" }]
+    }
+  },
+  "components": {
+    "messages": {
+      "orderCreated": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "orderId": { "type": "string" },
+            "productCode": { "type": "string" }
+          },
+          "required": ["orderId", "productCode"],
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}

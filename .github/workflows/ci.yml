@@ -259,6 +259,16 @@ jobs:
           SDDP_K8S_IT: 'true'
         run: mvn -B -Dtest=KubernetesPluginIntegrationTest test
 
+      - name: Run the Kafka transport plugin with a Kubernetes Job and real broker
+        env:
+          SDDP_KAFKA_K8S_IT: "true"
+        run: |
+          docker build -t sddp-kafka-plugin:local plugins/kafka
+          kind load docker-image sddp-kafka-plugin:local --name sddp-test
+          docker run -d --name sddp-kafka-pilot -p 127.0.0.1:9092:9092 apache/kafka:4.1.2
+          trap 'docker rm -f sddp-kafka-pilot >/dev/null 2>&1 || true' EXIT
+          mvn -B -Dtest=KafkaGeneratedClientIntegrationTest test
+
       - name: Verify deployed application and ServiceAccount against a real cluster
         run: |
           docker build -t sddp-kubernetes-test:local .
@@ -284,3 +294,12 @@ jobs:
           SddP_DB_USERNAME: sddp
           SddP_DB_PASSWORD: sddp
         run: mvn -B -Dtest=DockerPluginIntegrationTest test
+
+      - name: Run the Kafka transport plugin in Docker with a real broker
+        env:
+          SDDP_KAFKA_DOCKER_IT: "true"
+        run: |
+          docker build -t sddp-kafka-plugin:local plugins/kafka
+          docker run -d --name sddp-kafka-pilot -p 127.0.0.1:9092:9092 apache/kafka:4.1.2
+          trap 'docker rm -f sddp-kafka-pilot >/dev/null 2>&1 || true' EXIT
+          mvn -B -Dtest=KafkaGeneratedClientIntegrationTest test

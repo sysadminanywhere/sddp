@@ -2,6 +2,7 @@ package ru.sddp.platform.domain;
 
 import tools.jackson.databind.JsonNode;
 import ru.sddp.platform.api.HttpOperation;
+import ru.sddp.platform.api.EventOperation;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -20,6 +21,7 @@ public class ServiceApi {
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "request_schema", nullable = false, columnDefinition = "jsonb") private JsonNode requestSchema;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "response_schema", columnDefinition = "jsonb") private JsonNode responseSchema;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "http_operation", columnDefinition = "jsonb") private HttpOperation httpOperation;
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "event_operation", columnDefinition = "jsonb") private EventOperation eventOperation;
     @Column(name = "created_at", nullable = false) private Instant createdAt = Instant.now();
 
     protected ServiceApi() { }
@@ -31,7 +33,13 @@ public class ServiceApi {
 
     public ServiceApi(ServiceNode service, String name, String version, String description, ApiPattern pattern,
                       JsonNode requestSchema, JsonNode responseSchema, HttpOperation httpOperation) {
+        this(service, name, version, description, pattern, requestSchema, responseSchema, httpOperation, null);
+    }
+
+    public ServiceApi(ServiceNode service, String name, String version, String description, ApiPattern pattern,
+                      JsonNode requestSchema, JsonNode responseSchema, HttpOperation httpOperation, EventOperation eventOperation) {
         this.httpOperation = httpOperation;
+        this.eventOperation = eventOperation;
         this.service = service;
         this.name = name;
         this.version = version;
@@ -61,5 +69,6 @@ public class ServiceApi {
     public JsonNode getRequestSchema() { return requestSchema; }
     public JsonNode getResponseSchema() { return responseSchema; }
     public HttpOperation getHttpOperation() { return httpOperation; }
+    public EventOperation getEventOperation() { return eventOperation; }
     public Instant getCreatedAt() { return createdAt; }
 }

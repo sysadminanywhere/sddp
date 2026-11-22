@@ -11,10 +11,11 @@ public record TopologySnapshot(int formatVersion, String projectName, List<Envir
     public record Service(UUID id, String name, String serviceType, String description, Integer positionX, Integer positionY) { }
     public record Api(UUID id, UUID serviceId, String name, String version, String description, String pattern,
                       JsonNode requestSchema, JsonNode responseSchema,
-                      @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation httpOperation) {
+                      @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation httpOperation,
+                      @JsonInclude(JsonInclude.Include.NON_NULL) EventOperation eventOperation) {
         public Api(UUID id, UUID serviceId, String name, String version, String description, String pattern,
                    JsonNode requestSchema, JsonNode responseSchema) {
-            this(id, serviceId, name, version, description, pattern, requestSchema, responseSchema, null);
+            this(id, serviceId, name, version, description, pattern, requestSchema, responseSchema, null, null);
         }
     }
     public record Connection(String environment, UUID sourceId, UUID targetId, UUID sourceApiId, UUID targetApiId,

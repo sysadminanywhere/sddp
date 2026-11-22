@@ -35,6 +35,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import ru.sddp.platform.SddpApplication;
 import ru.sddp.platform.api.ApiModels;
+import ru.sddp.platform.api.AsyncApiModels;
+import ru.sddp.platform.api.EventOperation;
 import ru.sddp.platform.api.CodegenModels;
 import ru.sddp.platform.api.OpenApiModels;
 import ru.sddp.platform.api.TopologyRequests;
@@ -51,6 +53,7 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
     @Autowired ProjectService projectService;
     @Autowired ServiceCatalogService catalog;
     @Autowired OpenApiImportService openApi;
+    @Autowired AsyncApiImportService asyncApi;
     @Autowired TopologyWriteService topology;
     @Autowired ConnectionPromotionService promotion;
     @Autowired IntermediateRepresentationBuilder ir;
@@ -183,6 +186,32 @@ class SnapshotPostgresIntegrationTest extends SnapshotIntegrationTest {
             new OpenApiModels.PreviewRequest(null, yaml + "---\npaths: {}\n", null)));
         assertThrows(IllegalArgumentException.class, () -> openApi.preview(project, target.id(),
             new OpenApiModels.PreviewRequest(null, yaml + "paths: {}\n", null)));
+    }
+
+    @Test void importsKafkaBindingsAndPreservesDirectionsInSnapshots() throws Exception {
+        var mapper = JsonMapper.builder().build();
+        var document = mapper.readTree(Files.readString(Path.of("docs/examples/orders-events.asyncapi.json")));
+        var project = projectService.create(new ApiModels.CreateProjectRequest("orders-events")).id();
+        var client = catalog.createService(project, new TopologyRequests.CreateServiceRequest("client", ServiceType.CORE, null));
+        var broker = catalog.createService(project, new TopologyRequests.CreateServiceRequest("kafka", ServiceType.EXTERNAL, null));
+        var selected = List.of("publishOrderCreated", "receiveOrderCreated");
+        var request = new AsyncApiModels.ImportRequest(document, selected);
+        var imported = asyncApi.importSelected(project, broker.id(), request);
+        assertEquals(2, imported.created().size());
+        assertEquals(imported.created(), asyncApi.importSelected(project, broker.id(), request).existing());
+        var settings = mapper.createObjectNode().put("host", "127.0.0.1").put("port", 9092).put("target_endpoint", "orders.created");
+        for (UUID id : imported.created()) {
+            topology.addConnection(project, new TopologyRequests.CreateConnectionRequest("DEV", client.id(),
+                broker.id(), null, id, "KAFKA", settings, null), false);
+        }
+        var restored = importer.importSnapshot(mapper.valueToTree(exporter.export(project))).id();
+        var methods = ir.build(restored, "DEV").services().stream().flatMap(service -> service.outbound_connections().stream())
+            .flatMap(connection -> connection.methods().stream()).toList();
+        assertEquals(2, methods.size());
+        assertEquals(Set.of(new EventOperation(EventOperation.Direction.SEND, "orders.created"),
+            new EventOperation(EventOperation.Direction.RECEIVE, "orders.created")),
+            Set.copyOf(methods.stream().map(ApiModels.IrMethod::event_operation).toList()));
+        assertTrue(methods.stream().allMatch(method -> method.request_schema().path("properties").has("orderId")));
     }
 
     @Test void previewsContractDriftAndKeepsConnectionsOnTheOriginalVersion() throws Exception {

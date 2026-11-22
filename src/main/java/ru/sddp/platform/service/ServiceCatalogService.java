@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.sddp.platform.api.ApiModels;
 import ru.sddp.platform.api.TopologyRequests;
 import ru.sddp.platform.domain.ServiceApi;
+import ru.sddp.platform.domain.ApiPattern;
 import ru.sddp.platform.domain.ServiceNode;
 import ru.sddp.platform.repository.ServiceApiRepository;
 import ru.sddp.platform.repository.ServiceNodeRepository;
@@ -131,6 +132,9 @@ public class ServiceCatalogService {
         if (apis.existsByServiceIdAndNameAndVersionAndIdNot(serviceId, request.name(), request.version(), apiId)) {
             throw new IllegalArgumentException("API version already exists: " + request.name() + " " + request.version());
         }
+        if (api.getEventOperation() != null && request.pattern() != ApiPattern.PUB_SUB) {
+            throw new IllegalArgumentException("Event metadata requires a publish-subscribe API");
+        }
         validateSchemas(request.requestSchema(), request.responseSchema());
         api.update(request.name().trim(), request.version().trim(), normalizeDescription(request.description()),
             request.pattern(), request.requestSchema(), normalizeSchema(request.responseSchema()));
@@ -154,7 +158,8 @@ public class ServiceCatalogService {
         }
         ServiceApi next = apis.save(new ServiceApi(service, current.getName(), request.version().trim(),
             normalizeDescription(request.description() == null ? current.getDescription() : request.description()),
-            request.pattern(), request.requestSchema(), normalizeSchema(request.responseSchema()), current.getHttpOperation()));
+            request.pattern(), request.requestSchema(), normalizeSchema(request.responseSchema()), current.getHttpOperation(),
+            current.getEventOperation()));
         return apiResponse(next);
     }
 
@@ -178,7 +183,8 @@ public class ServiceCatalogService {
 
     private ApiModels.ServiceApiResponse apiResponse(ServiceApi api) {
         return new ApiModels.ServiceApiResponse(api.getId(), api.getService().getId(), api.getName(), api.getVersion(),
-            api.getDescription(), api.getPattern().name(), api.getRequestSchema(), api.getResponseSchema(), api.getCreatedAt(), api.getHttpOperation());
+            api.getDescription(), api.getPattern().name(), api.getRequestSchema(), api.getResponseSchema(), api.getCreatedAt(),
+            api.getHttpOperation(), api.getEventOperation());
     }
 
     private JsonNode normalizeSchema(JsonNode schema) {

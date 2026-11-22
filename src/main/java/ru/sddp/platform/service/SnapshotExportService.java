@@ -42,7 +42,8 @@ public class SnapshotExportService {
                 .map(n -> new TopologySnapshot.Service(n.getId(), n.getName(), n.getServiceType().name(), n.getDescription(), n.getPositionX(), n.getPositionY())).toList(),
             apis.findByServiceProjectIdOrderByServiceNameAscNameAscVersionAsc(id).stream()
                 .map(a -> new TopologySnapshot.Api(a.getId(), a.getService().getId(), a.getName(), a.getVersion(),
-                    a.getDescription(), a.getPattern().name(), a.getRequestSchema(), a.getResponseSchema(), a.getHttpOperation())).toList(),
+                    a.getDescription(), a.getPattern().name(), a.getRequestSchema(), a.getResponseSchema(), a.getHttpOperation(),
+                    a.getEventOperation())).toList(),
             projectConnections.stream()
                 .map(c -> new TopologySnapshot.Connection(c.getEnvironment(), c.getSource().getId(), c.getTarget().getId(),
                     c.getSourceApi() == null ? null : c.getSourceApi().getId(),
