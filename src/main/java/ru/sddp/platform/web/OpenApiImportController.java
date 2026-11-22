@@ -22,7 +22,7 @@ public class OpenApiImportController {
     @PostMapping("/preview")
     public OpenApiModels.Preview preview(@PathVariable UUID projectId, @PathVariable UUID serviceId,
                                          @Valid @RequestBody OpenApiModels.PreviewRequest request) {
-        return importer.preview(projectId, serviceId, request.document());
+        return importer.preview(projectId, serviceId, request);
     }
 
     @PostMapping("/import")

@@ -204,6 +204,8 @@ Each plugin Job has limits of 1 CPU, 512 MiB memory and 32 MiB ephemeral storage
 
 The [0.2.0 release](https://github.com/sysadminanywhere/sddp/releases/tag/v0.2.0) includes the OpenAPI pilot, which uses the [orders example](docs/examples/orders.openapi.json).
 
+The `0.3.0-SNAPSHOT` development build adds YAML upload, selection within large OpenAPI contracts, and stable Java names for external operation IDs. See the [import workflow](TECHNICAL.md#openapi-pilot) and [compatibility results](docs/OPENAPI_COMPATIBILITY.md).
+
 ### Core features
 - ✅ Project creation, viewing, listing, and deletion, plus CRUD for services, API operations, connections, and environments
 - ✅ Graph editor with validation & persistence

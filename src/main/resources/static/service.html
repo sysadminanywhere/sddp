@@ -75,8 +75,8 @@
           <summary id="openApiHeading" data-i18n="openapi.title">Import OpenAPI</summary>
           <form id="openApiPreviewForm" class="form section-gap" method="post" aria-labelledby="openApiHeading">
             <div>
-              <label for="openApiFile" data-i18n="openapi.file">OpenAPI JSON file</label>
-              <input id="openApiFile" name="document" type="file" accept=".json,application/json" required>
+              <label for="openApiFile" data-i18n="openapi.file">OpenAPI file (JSON or YAML)</label>
+              <input id="openApiFile" name="document" type="file" accept=".json,.yaml,.yml,application/json,application/yaml" required>
             </div>
             <div class="button-row">
               <button id="openApiPreview" type="submit" data-i18n="openapi.preview">Preview operations</button>
@@ -84,12 +84,18 @@
           </form>
           <p id="openApiStatus" class="hint" role="status"></p>
           <ul id="openApiWarnings" hidden></ul>
+          <search id="openApiSearch" hidden>
+            <label for="openApiFilter" data-i18n="openapi.filter">Filter by method, path, or name</label>
+            <input id="openApiFilter" name="filter" type="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+          </search>
+          <button id="openApiBack" type="button" data-i18n="openapi.back" hidden>Change selection</button>
           <form id="openApiImportForm" class="form" method="post" aria-labelledby="openApiOperationsLabel" hidden>
             <fieldset>
-              <legend id="openApiOperationsLabel" data-i18n="openapi.operations">Operations to import</legend>
+              <legend id="openApiOperationsLabel" data-i18n="openapi.operations" tabindex="-1">Operations to import</legend>
               <div id="openApiOperations" class="list"></div>
             </fieldset>
             <div class="button-row">
+              <button id="openApiCheck" type="submit" data-i18n="openapi.check" hidden>Validate selected operations</button>
               <button id="openApiImport" type="submit" data-i18n="openapi.import">Import selected operations</button>
             </div>
           </form>
