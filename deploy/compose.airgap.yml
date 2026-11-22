@@ -1,0 +1,11 @@
+services:
+  postgres:
+    image: ${SDDP_POSTGRES_IMAGE:-postgres:16-alpine}
+    pull_policy: never
+  app:
+    build: !reset null
+    pull_policy: never
+
+networks:
+  sddp-net:
+    internal: true

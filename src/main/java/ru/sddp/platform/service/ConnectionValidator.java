@@ -2,10 +2,89 @@ package ru.sddp.platform.service;
 
 import tools.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
+import java.util.HashSet;
 import java.util.Set;
 
 @Service
 public class ConnectionValidator {
+    void validateVersionMapping(JsonNode previousRequest, JsonNode sourceRequest, JsonNode targetRequest, JsonNode mapping) {
+        if (mapping == null || mapping.isNull()) {
+            var previousRequired = requiredFields(previousRequest);
+            var newRequired = requiredFields(targetRequest);
+            newRequired.removeAll(previousRequired);
+            if (!newRequired.isEmpty()) throw new CompatibilityViolationException("New required fields need a mapping: " + newRequired);
+            return;
+        }
+        validateMapping(mapping);
+        var destinations = new HashSet<String>();
+        for (JsonNode rule : mapping.path("transformations")) {
+            String to = rule.path("to").asText();
+            JsonNode target = field(targetRequest, to);
+            if (destinations.stream().anyMatch(path -> path.equals(to) || path.startsWith(to + ".") || to.startsWith(path + "."))) {
+                throw new CompatibilityViolationException("Overlapping mapping destination: " + to);
+            }
+            destinations.add(to);
+            switch (rule.path("type").asText()) {
+                case "DIRECT_COPY" -> {
+                    if (sourceRequest != null) {
+                        JsonNode source = field(sourceRequest, rule.path("from").asText());
+                        checkType(source.path("type").asText(""), target, to);
+                    }
+                }
+                case "CONCATENATE" -> {
+                    checkType("string", target, to);
+                    if (sourceRequest != null) {
+                        for (JsonNode path : rule.path("from")) field(sourceRequest, path.asText());
+                    }
+                }
+                case "HARDCODED_VALUE" -> checkType(jsonType(rule.path("value")), target, to);
+                default -> throw new IllegalArgumentException("Unknown mapping rule type");
+            }
+        }
+        for (String required : requiredFields(targetRequest)) {
+            String prefix = "$." + required;
+            if (destinations.stream().noneMatch(path -> path.equals(prefix) || path.startsWith(prefix + "."))) {
+                throw new CompatibilityViolationException("Missing mapping for required destination: " + prefix);
+            }
+        }
+    }
+
+    private JsonNode field(JsonNode schema, String path) {
+        JsonNode current = schema;
+        for (String segment : path.substring(2).split("\\.", -1)) current = current.path("properties").path(segment);
+        if (current.isMissingNode()) throw new CompatibilityViolationException("Unknown mapping field: " + path);
+        return current;
+    }
+
+    private Set<String> requiredFields(JsonNode schema) {
+        var required = new java.util.TreeSet<String>();
+        schema.path("required").forEach(field -> required.add(field.asText()));
+        return required;
+    }
+
+    private void checkType(String actual, JsonNode target, String path) {
+        var expected = target.path("type");
+        if (actual.isEmpty() || expected.isMissingNode()) return;
+        boolean compatible = expected.isArray()
+            ? expected.values().stream().anyMatch(type -> matches(actual, type.asText()))
+            : matches(actual, expected.asText());
+        if (!compatible) throw new CompatibilityViolationException("Incompatible mapping type at " + path);
+    }
+
+    private boolean matches(String actual, String expected) {
+        return actual.equals(expected) || "integer".equals(actual) && "number".equals(expected);
+    }
+
+    private String jsonType(JsonNode value) {
+        if (value.isIntegralNumber()) return "integer";
+        if (value.isNumber()) return "number";
+        if (value.isTextual()) return "string";
+        if (value.isBoolean()) return "boolean";
+        if (value.isArray()) return "array";
+        if (value.isObject()) return "object";
+        return "null";
+    }
+
     public void validate(String environment, String transport, JsonNode settings, JsonNode mapping) {
         if (environment == null || environment.isBlank()) throw new IllegalArgumentException("Invalid environment");
         if (!Set.of("REST", "GRPC", "KAFKA", "RABBITMQ").contains(transport)) throw new IllegalArgumentException("Invalid transport");

@@ -104,6 +104,9 @@ jobs:
         env:
           SDDP_UPGRADE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
 
+      - name: Verify isolated installation and offline Java build
+        run: bash scripts/test-airgap-install.sh
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4

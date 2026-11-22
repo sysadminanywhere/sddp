@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Service;
 import ru.sddp.platform.api.*;
 import java.io.StringWriter;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -17,6 +18,12 @@ public class CodeGenerationService {
     private final Configuration freemarker; private final MeterRegistry meters;
     public CodeGenerationService(IntermediateRepresentationBuilder ir, Configuration freemarker, PluginExecutionFactory pluginFactory, BuildEventPublisher events, ru.sddp.platform.repository.CodegenPluginRepository plugins, MeterRegistry meters) { this.ir = ir; this.freemarker = freemarker; this.pluginFactory = pluginFactory; this.events = events; this.plugins = plugins; this.meters = meters; }
     public CodegenModels.GenerateResponse generate(CodegenModels.GenerateRequest request) {
+        return generate(request, false);
+    }
+    CodegenModels.GenerateResponse generateArtifact(CodegenModels.GenerateRequest request) {
+        return generate(request, true);
+    }
+    private CodegenModels.GenerateResponse generate(CodegenModels.GenerateRequest request, boolean artifact) {
         if (request.projectId() == null) throw new IllegalArgumentException("projectId is required");
         ApiModels.IrManifest manifest = ir.build(request.projectId(), request.environment());
         events.publish("CODEGEN_STARTED", manifest);
@@ -28,7 +35,9 @@ public class CodeGenerationService {
             events.publish("CODEGEN_COMPLETED", manifest);
             return new CodegenModels.GenerateResponse(request.plugin().language(), null, null, result.files());
         }
-        var connections = manifest.services().stream().flatMap(s -> s.outbound_connections().stream()).toList();
+        var connectionStream = manifest.services().stream().flatMap(s -> s.outbound_connections().stream());
+        var connections = (artifact ? connectionStream.sorted(Comparator.comparing(ApiModels.IrConnection::toString))
+            : connectionStream).toList();
         if (connections.isEmpty()) throw new IllegalArgumentException("IR contains no outbound connections");
         if (!request.packageName().matches("[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)*") || !request.clientName().matches("[A-Za-z_$][A-Za-z0-9_$]*")) throw new IllegalArgumentException("Package and client names must be valid Java identifiers");
         try {
@@ -77,11 +86,26 @@ public class CodeGenerationService {
                 "target_endpoint", endpoint, "methods", methods, "mapping_json", mapping,
                 "timeout_ms", timeout, "retries", retries, "security_jwt", "JWT".equals(security)));
             if (http != null) model.put("http", httpTemplateModel(http));
+            if (artifact && http != null && connection.methods().size() == 1) {
+                var method = connection.methods().getFirst();
+                String responseDto = className + "Response";
+                FlatJavaDto.source(request.packageName(), responseDto, method.response_schema()).ifPresent(source -> {
+                    model.put("responseDto", responseDto);
+                    files.put(responseDto + ".java", source);
+                });
+                if (HttpOperation.JSON.equals(http.bodyContentType()) && mapping.isEmpty()) {
+                    String requestDto = className + "Request";
+                    FlatJavaDto.source(request.packageName(), requestDto, method.request_schema()).ifPresent(source -> {
+                        model.put("requestDto", requestDto);
+                        files.put(requestDto + ".java", source);
+                    });
+                }
+            }
             template.process(model, writer);
             files.put(className + ".java", writer.toString());
             }
-            var first = files.entrySet().iterator().next();
-            CodegenModels.GenerateResponse result = new CodegenModels.GenerateResponse("JAVA", first.getKey(), first.getValue(), files);
+            String first = request.clientName() + (connections.size() == 1 ? "" : "1") + ".java";
+            CodegenModels.GenerateResponse result = new CodegenModels.GenerateResponse("JAVA", first, files.get(first), files);
             events.publish("CODEGEN_COMPLETED", manifest);
             return result;
         } catch (java.io.IOException | TemplateException e) { throw new IllegalStateException("Code generation failed", e); }

@@ -138,6 +138,7 @@ See [OpenAPI pilot](#openapi-pilot) for importing operations and generating clie
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/codegen/generate` | Generate code `{projectId, environment, packageName, clientName, plugin?}` |
+| `POST` | `/codegen/artifact` | Download a Java Maven project ZIP `{projectId, environment, packageName, clientName, version}` |
 | `GET` | `/codegen/plugins` | List active plugins |
 
 ### Health
@@ -292,6 +293,12 @@ The preview and import endpoints under `/api/v1/projects/{projectId}/services/{s
 Imported REST methods carry `http_operation` in the IR. Snapshot v1 preserves the method, path, body flags, declared parameters, and optional content type, serialization and success status. Older entries use scalar parameters and JSON bodies by default. The client uses the contract path when the connection endpoint is `/`. A customized endpoint must keep the same path placeholders. Generated methods take maps for declared path and query parameters and a Java object for JSON or a map for a form body. Mapping rules run before body serialization. Existing connections without this metadata continue to send POST.
 
 ### Built-in Generator (FreeMarker)
+
+For an offline build, import the snapshot and call `POST /api/v1/codegen/artifact` with the imported project ID and an explicit environment and artifact version. Extract the ZIP and run `mvn -o package` using a Maven repository populated with the versions pinned in the generated POM. The JAR contains `META-INF/sddp/sddp-artifact.json` with the environment, bound API versions, generator version, and source checksums. `SHA256SUMS` also covers the manifest in the source ZIP. Repeated exports of unchanged project data use stable source ordering and timestamps.
+
+The artifact generator uses Java records for flat JSON objects whose property names are valid record components and whose types are scalar or lists of scalars. Mapped requests and form bodies retain their existing input shapes. Other response or request schemas retain the generic API. The regular code generation endpoint retains its existing signatures.
+
+To move an existing connection, send `PUT /api/v1/projects/{projectId}/connections/{connectionId}/target-version` with `expectedTargetApiId` and `targetApiId`. The target must be another version of the same operation. Provide `mappingRules` to replace the current mapping during this update. The endpoint checks destination paths, declared scalar or collection types, and required top-level fields. It honors protected-environment confirmation and modifies only the selected connection.
 
 Template: `src/main/resources/templates/proxy-adapter.java.ftl`
 

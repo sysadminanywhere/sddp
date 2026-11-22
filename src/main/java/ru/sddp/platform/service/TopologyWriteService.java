@@ -2,9 +2,11 @@ package ru.sddp.platform.service;
 
 import ru.sddp.platform.api.TopologyRequests;
 import ru.sddp.platform.api.ApiModels;
+import ru.sddp.platform.api.HttpOperation;
 import ru.sddp.platform.domain.*;
 import ru.sddp.platform.repository.*;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Set;
@@ -64,6 +66,52 @@ public class TopologyWriteService {
         connection.update(environment, source, target, sourceApi, targetApi, request.transportType(),
             request.connectionSettings(), request.mappingRules());
         return edge(connection);
+    }
+
+    @Transactional
+    public ApiModels.Edge rebindTargetVersion(UUID projectId, UUID connectionId,
+                                             TopologyRequests.RebindTargetVersionRequest request, boolean confirmProtected) {
+        var connection = connections.lockByIdAndProjectId(connectionId, projectId)
+            .orElseThrow(() -> new ResourceNotFoundException("Connection not found: " + connectionId));
+        environments.requireWritable(projectId, connection.getEnvironment(), confirmProtected);
+        var previous = connection.getTargetApi();
+        if (previous == null || !previous.getId().equals(request.expectedTargetApiId())) {
+            throw new CompatibilityViolationException("The connection target changed. Reload the connection and retry.");
+        }
+        var next = requireApi(request.targetApiId(), connection.getTarget().getId(), "Target");
+        if (!previous.getName().equals(next.getName()) || previous.getPattern() != next.getPattern()) {
+            throw new CompatibilityViolationException("Choose another version of the same target operation");
+        }
+        JsonNode mapping = request.mappingRules() == null ? connection.getMappingRules() : request.mappingRules();
+        JsonNode sourceSchema = connection.getSourceApi() == null ? null : connection.getSourceApi().getRequestSchema();
+        connectionValidator.validateVersionMapping(previous.getRequestSchema(), sourceSchema, next.getRequestSchema(), mapping);
+        if (mapping != null && !mapping.isNull()) {
+            if (next.getHttpOperation() != null && !next.getHttpOperation().requestBody()) {
+                throw new CompatibilityViolationException("The target operation does not accept a body mapping");
+            }
+            var normalized = (ObjectNode) mapping.deepCopy();
+            normalized.remove("target_contract");
+            normalized.put("target_api", apiLabel(next));
+            mapping = normalized;
+        }
+        JsonNode settings = rebindSettings(connection, previous, next);
+        validateTransport(connection.getEnvironment(), connection.getTransportType(), settings, mapping);
+        connection.update(connection.getEnvironment(), connection.getSource(), connection.getTarget(), connection.getSourceApi(),
+            next, connection.getTransportType(), settings, mapping);
+        return edge(connection);
+    }
+
+    private JsonNode rebindSettings(TopologyConnection connection, ServiceApi previous, ServiceApi next) {
+        JsonNode settings = connection.getConnectionSettings();
+        if (!"REST".equals(connection.getTransportType()) || next.getHttpOperation() == null) return settings;
+        String endpoint = settings.path("target_endpoint").asText();
+        if (previous.getHttpOperation() != null && endpoint.equals(previous.getHttpOperation().path())) {
+            return ((ObjectNode) settings.deepCopy()).put("target_endpoint", "/");
+        }
+        if (!"/".equals(endpoint) && !HttpOperation.placeholders(endpoint).equals(HttpOperation.placeholders(next.getHttpOperation().path()))) {
+            throw new CompatibilityViolationException("The custom endpoint needs the new operation's path parameters");
+        }
+        return settings;
     }
 
     @Transactional

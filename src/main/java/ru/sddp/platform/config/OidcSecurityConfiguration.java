@@ -43,7 +43,7 @@ public class OidcSecurityConfiguration {
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/actuator/metrics/**").hasRole("SDDP_ADMIN")
                 .requestMatchers("/api/v1/projects", "/api/v1/projects/import").hasRole("SDDP_ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/v1/codegen/generate").hasRole("SDDP_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/codegen/generate", "/api/v1/codegen/artifact").hasRole("SDDP_ADMIN")
                 .requestMatchers("/api/v1/projects/*").access(projectAuthorization)
                 .requestMatchers("/api/v1/projects/*/**").access(projectAuthorization)
                 .anyRequest().authenticated())
