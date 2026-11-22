@@ -59,6 +59,42 @@ async function importOrders() {
   await writeFile('/qa/orders.zip', new Uint8Array(await artifact.arrayBuffer()));
 }
 
-if (process.argv[2] === 'export') await exportOrders();
-else if (process.argv[2] === 'import') await importOrders();
-else throw new Error('Choose export or import');
+async function exportEvents() {
+  const project = await (await post('/projects', { name: 'offline-order-events' })).json();
+  const path = '/projects/' + project.id;
+  const store = await (await post(path + '/services', { name: 'store', serviceType: 'CORE' })).json();
+  const orders = await (await post(path + '/services', { name: 'orders', serviceType: 'EXTERNAL' })).json();
+  const document = JSON.parse(await readFile('/qa/orders-events.json', 'utf8'));
+  const operations = ['publishOrderCreated', 'receiveOrderCreated'];
+  const imported = await (await post(path + '/services/' + orders.id + '/apis/asyncapi/import',
+    { document, operations })).json();
+  assert.equal(imported.created.length, operations.length);
+  for (const targetApiId of imported.created) {
+    await post(path + '/connections', {
+      environment: 'DEV',
+      sourceServiceId: store.id,
+      targetServiceId: orders.id,
+      targetApiId,
+      transportType: 'KAFKA',
+      connectionSettings: { host: 'kafka', port: 9092, target_endpoint: 'orders.created' },
+    });
+  }
+  await writeFile('/qa/events-snapshot.json', await (await post(path + '/snapshot', {})).text());
+}
+
+async function importEvents() {
+  const snapshot = JSON.parse(await readFile('/qa/events-snapshot.json', 'utf8'));
+  const restored = await (await post('/projects/import', snapshot)).json();
+  await writeFile('/qa/events-project-id', restored.id);
+  await writeFile('/qa/kafka-ir.json', await (await post('/projects/' + restored.id + '/ir?environment=DEV', {})).text());
+}
+
+if (process.argv[2] === 'export') {
+  await exportOrders();
+  await exportEvents();
+} else if (process.argv[2] === 'import') {
+  await importOrders();
+  await importEvents();
+} else {
+  throw new Error('Choose export or import');
+}
