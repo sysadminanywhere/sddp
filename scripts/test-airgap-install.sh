@@ -8,6 +8,8 @@ builder="sddp-airgap-builder:${suffix}"
 postgres=postgres:16-alpine
 test_runner=node:22-alpine
 export POSTGRES_PASSWORD="sddp-test-db-secret-${suffix}"
+# CI also defines IMAGE_NAME, which otherwise takes precedence over the bundle environment file.
+export IMAGE_NAME="${image%:*}" IMAGE_TAG="${image##*:}" SDDP_POSTGRES_IMAGE="$postgres"
 work=$(mktemp -d -t sddp-airgap.XXXXXXXX)
 [[ "$work" == /tmp/sddp-airgap.* ]]
 kit="$work/kit"
