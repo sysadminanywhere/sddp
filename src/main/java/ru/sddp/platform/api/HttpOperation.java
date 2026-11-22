@@ -9,12 +9,19 @@ import java.util.regex.Pattern;
 
 /** HTTP metadata for an operation imported from an OpenAPI contract. */
 public record HttpOperation(String method, String path, boolean requestBody, boolean bodyRequired,
-                            List<Parameter> parameters) {
+                            List<Parameter> parameters, String bodyContentType, String responseStatus, List<String> bracketFormFields) {
     public static final Set<String> METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS");
+    public static final String JSON = "application/json";
+    public static final String FORM = "application/x-www-form-urlencoded";
     private static final String NAME = "[A-Za-z0-9_.~-]+";
+    private static final Pattern QUERY_NAME = Pattern.compile(NAME + "(?:\\[" + NAME + "\\])*");
     private static final Pattern TEMPLATE = Pattern.compile("\\{(" + NAME + ")\\}");
     private static final String PATH_TEXT = "[A-Za-z0-9_/.~-]*+";
     private static final Pattern PATH = Pattern.compile("/" + PATH_TEXT + "(?:\\{" + NAME + "\\}" + PATH_TEXT + ")*");
+
+    public HttpOperation(String method, String path, boolean requestBody, boolean bodyRequired, List<Parameter> parameters) {
+        this(method, path, requestBody, bodyRequired, parameters, null, null, List.of());
+    }
 
     public HttpOperation {
         if (method == null || !METHODS.contains(method)) throw new IllegalArgumentException("Unsupported HTTP method");
@@ -22,6 +29,19 @@ public record HttpOperation(String method, String path, boolean requestBody, boo
         parameters = List.copyOf(parameters);
         if (bodyRequired && !requestBody || requestBody && Set.of("GET", "HEAD").contains(method)) {
             throw new IllegalArgumentException("Unsupported request body for " + method);
+        }
+        if (requestBody && bodyContentType == null) bodyContentType = JSON;
+        if (bodyContentType != null && (!requestBody || !Set.of(JSON, FORM).contains(bodyContentType))) {
+            throw new IllegalArgumentException("Unsupported HTTP body content type");
+        }
+        if (responseStatus != null && !responseStatus.matches("2(?:[0-9]{2}|XX)")) {
+            throw new IllegalArgumentException("Unsupported HTTP success status");
+        }
+        bracketFormFields = bracketFormFields == null ? List.of() : List.copyOf(bracketFormFields);
+        if (!bracketFormFields.isEmpty() && (!FORM.equals(bodyContentType) || bracketFormFields.size() > 200
+            || bracketFormFields.stream().anyMatch(name -> name.length() > 100 || !name.matches(NAME))
+            || new HashSet<>(bracketFormFields).size() != bracketFormFields.size())) {
+            throw new IllegalArgumentException("Unsupported HTTP form fields");
         }
         var declared = new HashSet<String>();
         var pathParameters = new HashSet<String>();
@@ -52,17 +72,44 @@ public record HttpOperation(String method, String path, boolean requestBody, boo
             if (!parameter.path("name").isTextual() || !parameter.path("in").isTextual() || !parameter.path("required").isBoolean()) {
                 throw new IllegalArgumentException("Invalid snapshot HTTP parameter");
             }
+            String encoding = optionalText(parameter, "encoding");
+            JsonNode schema = parameter.get("schema");
             parameters.add(new Parameter(parameter.path("name").asText(), parameter.path("in").asText(),
-                parameter.path("required").booleanValue()));
+                parameter.path("required").booleanValue(), encoding == null ? Encoding.SCALAR : Encoding.valueOf(encoding),
+                schema == null || schema.isNull() ? null : schema));
+        }
+        var bracketFields = new ArrayList<String>();
+        JsonNode fields = node.path("bracketFormFields");
+        if (!fields.isMissingNode() && !fields.isNull()) {
+            if (!fields.isArray()) throw new IllegalArgumentException("Invalid snapshot HTTP form fields");
+            for (JsonNode field : fields) {
+                if (!field.isTextual()) throw new IllegalArgumentException("Invalid snapshot HTTP form field");
+                bracketFields.add(field.asText());
+            }
         }
         return new HttpOperation(node.path("method").asText(), node.path("path").asText(), node.path("requestBody").booleanValue(),
-            node.path("bodyRequired").booleanValue(), parameters);
+            node.path("bodyRequired").booleanValue(), parameters, optionalText(node, "bodyContentType"),
+            optionalText(node, "responseStatus"), bracketFields);
     }
 
-    public record Parameter(String name, String in, boolean required) {
+    private static String optionalText(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        if (value.isMissingNode() || value.isNull()) return null;
+        if (!value.isTextual()) throw new IllegalArgumentException("Invalid snapshot HTTP " + field);
+        return value.asText();
+    }
+
+    public enum Encoding { SCALAR, ARRAY, ARRAY_CSV, OBJECT, OBJECT_CSV, DEEP_OBJECT, DEEP_OBJECT_OR_SCALAR, BRACKET_ARRAY }
+
+    public record Parameter(String name, String in, boolean required, Encoding encoding, JsonNode schema) {
+        public Parameter(String name, String in, boolean required) { this(name, in, required, Encoding.SCALAR, null); }
+
         public Parameter {
-            if (name == null || name.length() > 100 || !name.matches(NAME)
-                || (!"path".equals(in) && !"query".equals(in)) || ("path".equals(in) && !required)) {
+            if (encoding == null) encoding = Encoding.SCALAR;
+            if (name == null || name.length() > 100 || (!"path".equals(in) && !"query".equals(in))
+                || ("path".equals(in) && (!required || !name.matches(NAME) || encoding != Encoding.SCALAR))
+                || ("query".equals(in) && !QUERY_NAME.matcher(name).matches())
+                || (schema != null && !schema.isObject() && !schema.isBoolean())) {
                 throw new IllegalArgumentException("Unsupported HTTP parameter");
             }
         }

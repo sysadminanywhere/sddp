@@ -14,6 +14,7 @@
   let openApiSource = null;
   let openApiCatalog = null;
   let openApiSelection = new Set();
+  let openApiVersion = '';
 
   function nodeName(id) {
     return topology.nodes.find(node => node.id === id)?.name || id;
@@ -139,6 +140,10 @@
     openApiSource = null;
     openApiCatalog = null;
     openApiSelection.clear();
+    openApiVersion = '';
+    byId('openApiVersion').value = '';
+    byId('openApiVersion').removeAttribute('aria-invalid');
+    byId('openApiVersionField').hidden = true;
     byId('openApiImportForm').hidden = true;
     byId('openApiWarnings').hidden = true;
     byId('openApiSearch').hidden = true;
@@ -156,6 +161,8 @@
 
   function renderOpenApiPreview(preview) {
     const catalog = preview.selectionRequired;
+    openApiVersion = preview.version;
+    byId('openApiVersionField').hidden = !preview.operations.some(operation => operation.exists && operation.comparison);
     const warnings = byId('openApiWarnings');
     warnings.replaceChildren(...preview.warnings.map(warning => {
       const item = document.createElement('li');
@@ -174,12 +181,16 @@
       checkbox.name = 'operations';
       checkbox.id = 'openapi-operation-' + index;
       checkbox.value = operation.key;
+      if (operation.exists && operation.comparison) checkbox.dataset.versionConflict = 'true';
       checkbox.checked = catalog ? openApiSelection.has(operation.key) : !operation.exists || openApiSelection.has(operation.key);
       label.htmlFor = checkbox.id;
       label.textContent = operation.method + ' ' + operation.path + ' · ' + operation.name
         + (operation.exists ? ' · ' + t('openapi.existing') : '');
-      row.className = 'button-row';
-      row.append(checkbox, label);
+      const option = document.createElement('div');
+      option.className = 'button-row';
+      option.append(checkbox, label);
+      row.append(option);
+      if (operation.comparison) row.append(openApiComparison(operation.comparison));
       return row;
     }));
     byId('openApiImportForm').hidden = preview.operations.length === 0;
@@ -197,6 +208,25 @@
     }
   }
 
+  function openApiComparison(comparison) {
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = t('openapi.comparison', { version: comparison.baselineVersion });
+    const list = document.createElement('ul');
+    for (const change of comparison.changes) {
+      const item = document.createElement('li');
+      item.textContent = t('openapi.change.' + change.kind, { path: change.path });
+      list.append(item);
+    }
+    details.append(summary, list);
+    if (comparison.truncated) {
+      const note = document.createElement('p');
+      note.textContent = t('openapi.changeMore');
+      details.append(note);
+    }
+    return details;
+  }
+
   async function readOpenApiFile(file) {
     const text = await file.text();
     if (/\.ya?ml$/i.test(file.name)) return { yaml: text };
@@ -212,6 +242,8 @@
     const previewForm = byId('openApiPreviewForm');
     const previewUrl = () => new URL(previewForm.action).pathname;
     const previewButton = byId('openApiPreview');
+    const versionInput = byId('openApiVersion');
+    versionInput.addEventListener('input', () => versionInput.removeAttribute('aria-invalid'));
     fileInput.addEventListener('change', resetOpenApiPreview);
     byId('openApiFilter').addEventListener('input', filterOpenApiOperations);
     byId('openApiBack').addEventListener('click', () => renderOpenApiPreview(openApiCatalog));
@@ -250,6 +282,14 @@
         return;
       }
       const validating = !byId('openApiCheck').hidden;
+      const version = byId('openApiVersionField').hidden ? '' : versionInput.value.trim();
+      const hasConflict = !validating && form.querySelector('input[data-version-conflict]:checked');
+      if (hasConflict && (!version || version === openApiVersion)) {
+        byId('openApiStatus').textContent = t('openapi.versionRequired');
+        versionInput.setAttribute('aria-invalid', 'true');
+        versionInput.focus();
+        return;
+      }
       const button = byId(validating ? 'openApiCheck' : 'openApiImport');
       button.disabled = true;
       previewButton.disabled = true;
@@ -264,7 +304,7 @@
           return;
         }
         const result = await api(new URL(form.action).pathname, {
-          method: 'POST', body,
+          method: 'POST', body: version ? { ...body, version } : body,
         });
         resetOpenApiPreview();
         byId('openApiStatus').textContent = t('openapi.importResult', {

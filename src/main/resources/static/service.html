@@ -94,6 +94,12 @@
               <legend id="openApiOperationsLabel" data-i18n="openapi.operations" tabindex="-1">Operations to import</legend>
               <div id="openApiOperations" class="list"></div>
             </fieldset>
+            <div id="openApiVersionField" hidden>
+              <label for="openApiVersion" data-i18n="openapi.newVersion">New import version</label>
+              <input id="openApiVersion" name="version" maxlength="255" autocomplete="off" autocorrect="off"
+                     autocapitalize="none" spellcheck="false" aria-describedby="openApiVersionHint">
+              <p id="openApiVersionHint" class="hint" data-i18n="openapi.versionHint">A new version preserves the stored operation and its connections.</p>
+            </div>
             <div class="button-row">
               <button id="openApiCheck" type="submit" data-i18n="openapi.check" hidden>Validate selected operations</button>
               <button id="openApiImport" type="submit" data-i18n="openapi.import">Import selected operations</button>

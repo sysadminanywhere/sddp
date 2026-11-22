@@ -91,9 +91,11 @@ public class CodeGenerationService {
         var path = http.parameters().stream().filter(parameter -> "path".equals(parameter.in()))
             .map(parameter -> Map.of("name", parameter.name(), "required", parameter.required())).toList();
         var query = http.parameters().stream().filter(parameter -> "query".equals(parameter.in()))
-            .map(parameter -> Map.of("name", parameter.name(), "required", parameter.required())).toList();
+            .map(parameter -> Map.of("name", parameter.name(), "required", parameter.required(), "encoding", parameter.encoding().name())).toList();
         return Map.of("method", http.method(), "hasBody", http.requestBody(), "bodyRequired", http.bodyRequired(),
-            "pathParameters", path, "queryParameters", query);
+            "pathParameters", path, "queryParameters", query,
+            "structuredQuery", http.parameters().stream().anyMatch(parameter -> parameter.encoding() != HttpOperation.Encoding.SCALAR),
+            "formBody", HttpOperation.FORM.equals(http.bodyContentType()), "bracketFormFields", http.bracketFormFields());
     }
 
     private CodegenModels.PluginExecutionResult executePlugin(PluginExecutor executor, ApiModels.IrManifest manifest,
