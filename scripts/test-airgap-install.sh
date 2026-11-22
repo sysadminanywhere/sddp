@@ -14,6 +14,7 @@ kit="$work/kit"
 source_compose=(docker compose -p "${project}-source" --env-file "$kit/images.env" -f "$kit/compose.yml")
 compose=(docker compose -p "$project" --env-file "$kit/images.env" -f "$kit/compose.yml" -f "$kit/compose.airgap.yml")
 orders_fixture="${project}-orders"
+test_user="$(id -u):$(id -g)"
 cleanup() {
   if [[ -f "$kit/images.env" ]]; then "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true; fi
   if [[ -f "$kit/images.env" ]]; then "${source_compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true; fi
@@ -36,7 +37,7 @@ cp -- docs/examples/orders.openapi.json "$work/qa/orders.json"
 cp -- scripts/seed-airgap-orders.mjs "$work/qa/seed.mjs"
 "${source_compose[@]}" up -d --no-build --pull never
 seed() {
-  docker run --rm --pull never --network "$1" -e SDDP_TEST_ORIGIN=http://app:8080 \
+  docker run --rm --pull never --network "$1" --user "$test_user" -e SDDP_TEST_ORIGIN=http://app:8080 \
     -v "$work/qa:/qa" "$test_runner" node /qa/seed.mjs "$2"
 }
 seed "${project}-source_sddp-net" export
@@ -51,7 +52,8 @@ network="${project}_sddp-net"
 seed "$network" import
 unzip -q "$work/qa/orders.zip" -d "$work/artifact"
 (cd -- "$work/artifact" && sha256sum -c SHA256SUMS)
-docker run --rm --pull never --network none -v "$work/artifact:/build" "$builder"
+docker run --rm --pull never --network none --user "$test_user" -e HOME=/tmp \
+  -v "$work/artifact:/build" "$builder"
 [[ -s "$work/artifact/target/orders-1.0.0.jar" ]]
 unzip -p "$work/artifact/target/orders-1.0.0.jar" META-INF/sddp/sddp-artifact.json |
   node -e 'const m=JSON.parse(require("fs").readFileSync(0,"utf8"));
@@ -81,7 +83,8 @@ class Consumer {
     }
 }
 JAVA
-docker run --rm --pull never --network "$network" --entrypoint java -v "$work/artifact:/build" "$builder" \
+docker run --rm --pull never --network "$network" --user "$test_user" --entrypoint java \
+  -v "$work/artifact:/build" "$builder" \
   -cp '/build/target/orders-1.0.0.jar:/opt/sddp/runtime/*' /build/Consumer.java
 docker rm -f "$orders_fixture" >/dev/null
 

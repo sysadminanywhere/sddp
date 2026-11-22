@@ -32,7 +32,8 @@ Import the topology snapshot and download the Java project ZIP from `POST /api/v
 ```bash
 cd /path/to/extracted-project
 sha256sum -c SHA256SUMS
-docker run --rm --pull never --network none -v "$PWD:/build" sddp-maven-builder:pilot
+docker run --rm --pull never --network none --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$PWD:/build" sddp-maven-builder:pilot
 ```
 
 Use the Maven builder tag recorded in the kit's `images.env`. Deploy the JAR with the application's pinned Java dependencies. The generated client connects to the target configured for the selected environment. Supply runtime credentials to the consuming application. Topology fields and mapping constants belong to the project snapshot and may appear in generated source, so keep credentials and working payloads in the consuming system.
