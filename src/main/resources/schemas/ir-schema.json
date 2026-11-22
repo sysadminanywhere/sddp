@@ -45,6 +45,14 @@
                       "pattern": { "type": "string", "enum": ["REQUEST_RESPONSE", "PUB_SUB"] },
                       "request_schema": { "type": "object" },
                       "response_schema": { "type": "object" },
+                      "event_operation": {
+                        "type": "object",
+                        "required": ["direction", "topic"],
+                        "properties": {
+                          "direction": { "enum": ["SEND", "RECEIVE"] },
+                          "topic": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,249}$" }
+                        }
+                      },
                       "http_operation": {
                         "type": "object",
                         "required": ["method", "path", "requestBody", "bodyRequired", "parameters"],

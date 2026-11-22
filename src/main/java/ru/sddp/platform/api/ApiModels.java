@@ -15,7 +15,8 @@ public final class ApiModels {
     public record ServiceResponse(UUID id, String name, String serviceType, String description, Instant createdAt, long apiCount, Integer positionX, Integer positionY) { }
     public record ServiceApiResponse(UUID id, UUID serviceId, String name, String version, String description,
                                      String pattern, JsonNode requestSchema, JsonNode responseSchema, Instant createdAt,
-                                     @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation httpOperation) { }
+                                     @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation httpOperation,
+                                     @JsonInclude(JsonInclude.Include.NON_NULL) EventOperation eventOperation) { }
 
     public record EnvironmentResponse(UUID id, UUID projectId, String code, String name, int position,
                                       boolean isProtected, long connectionCount) { }
@@ -38,9 +39,13 @@ public final class ApiModels {
     public record IrService(String service_name, boolean is_external, List<IrConnection> outbound_connections) { }
     public record IrConnection(String client_name, String target_service_name, String transport_type, JsonNode connection_settings, List<IrMethod> methods, @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) JsonNode mapping_rules) { }
     public record IrMethod(String method_name, String pattern, JsonNode request_schema, JsonNode response_schema,
-                           @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation http_operation) {
+                           @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation http_operation,
+                           @JsonInclude(JsonInclude.Include.NON_NULL) EventOperation event_operation) {
         public IrMethod(String name, String pattern, JsonNode request, JsonNode response) {
-            this(name, pattern, request, response, null);
+            this(name, pattern, request, response, null, null);
+        }
+        public IrMethod(String name, String pattern, JsonNode request, JsonNode response, HttpOperation http) {
+            this(name, pattern, request, response, http, null);
         }
     }
 }

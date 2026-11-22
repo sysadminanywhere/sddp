@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.sddp.platform.api.ApiModels;
 import ru.sddp.platform.api.HttpOperation;
+import ru.sddp.platform.api.EventOperation;
 import ru.sddp.platform.domain.*;
 import ru.sddp.platform.repository.*;
 import java.util.*;
@@ -79,11 +80,15 @@ public class SnapshotImportService {
             JsonNode response = optionalSchema(api, "responseSchema");
             if (response != null) schemaValidator.validate(response);
             HttpOperation http = HttpOperation.fromSnapshot(api.path("httpOperation"));
+            EventOperation event = EventOperation.fromSnapshot(api.path("eventOperation"));
             if (http != null && pattern != ApiPattern.REQUEST_RESPONSE) {
                 throw new IllegalArgumentException("HTTP metadata requires a request-response API");
             }
+            if (event != null && pattern != ApiPattern.PUB_SUB) {
+                throw new IllegalArgumentException("Event metadata requires a publish-subscribe API");
+            }
             apiMap.put(id, apis.save(new ServiceApi(service, requiredText(api, "name"), requiredText(api, "version"),
-                optionalText(api, "description"), pattern, requiredSchema(api, "requestSchema"), response, http)));
+                optionalText(api, "description"), pattern, requiredSchema(api, "requestSchema"), response, http, event)));
         }
 
         for (JsonNode connection : requiredArray(root, "connections")) {
