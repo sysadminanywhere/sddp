@@ -459,7 +459,7 @@ export POSTGRES_PASSWORD='<strong unique password>'
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-To run a prebuilt image instead, set `IMAGE_NAME` (repository) and `IMAGE_TAG` (defaults to `latest`) and skip the build: `IMAGE_NAME=docker.io/<owner>/sddp IMAGE_TAG=0.4.0 docker compose -f docker-compose.prod.yml up -d --no-build`. Step-by-step instructions for both paths are in the [README](README.md#docker-single-host).
+To run a prebuilt image instead, set `IMAGE_NAME` (repository) and `IMAGE_TAG` (defaults to `latest`) and skip the build: `IMAGE_NAME=docker.io/<owner>/sddp IMAGE_TAG=0.5.0 docker compose -f docker-compose.prod.yml up -d --no-build`. Step-by-step instructions for both paths are in the [README](README.md#docker-single-host).
 
 `docker-compose.prod.yml`:
 - `app` (built image) + `postgres:16-alpine`
@@ -597,7 +597,7 @@ frontend/                  # React Flow + dagre source (npm build → static/flo
   - `main` branch: `{version}-{sha}`
   - `vX.Y.Z` tag: `X.Y.Z`, `X.Y`, `latest`
 - Use the commit-specific image tag or a digest for reproducible deployments.
-- Pushing a release tag such as `v0.4.0` triggers Docker Hub publication when `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are configured. CI pulls the published image, checks its revision, and runs the browser and database recovery checks with fresh PostgreSQL.
+- Pushing a release tag such as `v0.5.0` triggers Docker Hub publication when `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are configured. CI pulls the published image, checks its revision, and runs the browser and database recovery checks with fresh PostgreSQL. It also tests the isolated REST and Kafka kit with the published application image pinned by digest.
 - A release tag must exactly match the non-SNAPSHOT version in `pom.xml`; CI rejects mismatches before publishing. Verify the previous deployed version's backup and upgrade/rollback test before tagging.
 
 ---

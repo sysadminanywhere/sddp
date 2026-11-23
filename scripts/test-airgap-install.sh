@@ -36,7 +36,21 @@ trap cleanup EXIT
 # Stage the transferable kit on the connected side.
 docker pull "$baseline_source"
 docker tag "$baseline_source" "$baseline"
-docker build -t "$image" .
+if [[ -n "${SDDP_AIRGAP_PUBLISHED_IMAGE:-}" ]]; then
+  : "${SDDP_AIRGAP_PUBLISHED_REVISION:?Set the expected image revision}"
+  : "${SDDP_AIRGAP_PUBLISHED_VERSION:?Set the expected image version}"
+  docker pull "$SDDP_AIRGAP_PUBLISHED_IMAGE"
+  revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$SDDP_AIRGAP_PUBLISHED_IMAGE")
+  version=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$SDDP_AIRGAP_PUBLISHED_IMAGE")
+  if [[ "$revision" != "$SDDP_AIRGAP_PUBLISHED_REVISION" || "$version" != "$SDDP_AIRGAP_PUBLISHED_VERSION" ]]; then
+    printf 'Unexpected published image provenance: version %s at revision %s\n' "$version" "$revision" >&2
+    exit 1
+  fi
+  printf 'Verified published image version %s at revision %s\n' "$version" "$revision"
+  docker tag "$SDDP_AIRGAP_PUBLISHED_IMAGE" "$image"
+else
+  docker build -t "$image" .
+fi
 docker build -f deploy/Dockerfile.artifact-builder -t "$builder" .
 docker build -t "$kafka_plugin" plugins/kafka
 docker pull "$postgres"

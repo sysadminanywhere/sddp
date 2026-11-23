@@ -100,9 +100,13 @@ jobs:
           SDDP_TEST_BROWSER: "1"
 
       - name: Verify upgrade and rollback against the previous revision
-        run: bash scripts/test-upgrade-rollback.sh
         env:
           SDDP_UPGRADE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            export SDDP_UPGRADE_BASE_REF="$(git describe --tags --match 'v[0-9]*' --abbrev=0 HEAD^)"
+          fi
+          bash scripts/test-upgrade-rollback.sh
 
       - name: Verify isolated REST and Kafka installation, upgrade, and recovery
         run: bash scripts/test-airgap-install.sh
@@ -202,6 +206,14 @@ jobs:
           SDDP_TEST_PUBLISHED_REVISION: ${{ github.sha }}
           IMAGE_TAG: ${{ steps.maven-version.outputs.clean_version }}
         run: bash scripts/test-compose-recovery.sh
+
+      - name: Verify the published image in the isolated REST and Kafka kit
+        if: startsWith(github.ref, 'refs/tags/v') && steps.publish.outcome == 'success'
+        env:
+          SDDP_AIRGAP_PUBLISHED_IMAGE: docker.io/${{ github.repository }}@${{ steps.publish.outputs.digest }}
+          SDDP_AIRGAP_PUBLISHED_REVISION: ${{ github.sha }}
+          SDDP_AIRGAP_PUBLISHED_VERSION: ${{ steps.maven-version.outputs.clean_version }}
+        run: bash scripts/test-airgap-install.sh
 
   security:
     runs-on: ubuntu-latest

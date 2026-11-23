@@ -11,6 +11,13 @@ docker pull postgres:16-alpine
 bash scripts/package-airgap.sh sddp-airgap sddp pilot sddp-maven-builder:pilot
 ```
 
+For the 0.5.0 pilot, run the packaging commands from a checkout of tag `v0.5.0`. To use the published application image, replace the first build command with these two commands and build the Maven builder from that same checkout.
+
+```bash
+docker pull docker.io/sysadminanywhere/sddp:0.5.0
+docker tag docker.io/sysadminanywhere/sddp:0.5.0 sddp:pilot
+```
+
 Transfer the kit and the topology snapshot through the approved channel. Build the images for the operating system and architecture of the isolated Docker host.
 
 For the Kafka pilot, include the generator and the broker image if the isolated environment needs a broker. The kit records all transferred image tags in `images.txt`.
