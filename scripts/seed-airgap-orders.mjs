@@ -52,11 +52,6 @@ async function importOrders() {
   const snapshot = JSON.parse(await readFile('/qa/snapshot.json', 'utf8'));
   const restored = await (await post('/projects/import', snapshot)).json();
   await writeFile('/qa/project-id', restored.id);
-  await writeFile('/qa/ir.json', await (await post('/projects/' + restored.id + '/ir?environment=DEV', {})).text());
-  const artifact = await post('/codegen/artifact', {
-    projectId: restored.id, environment: 'DEV', packageName: 'pilot', clientName: 'Orders', version: '1.0.0',
-  });
-  await writeFile('/qa/orders.zip', new Uint8Array(await artifact.arrayBuffer()));
 }
 
 async function exportEvents() {
@@ -86,7 +81,17 @@ async function importEvents() {
   const snapshot = JSON.parse(await readFile('/qa/events-snapshot.json', 'utf8'));
   const restored = await (await post('/projects/import', snapshot)).json();
   await writeFile('/qa/events-project-id', restored.id);
-  await writeFile('/qa/kafka-ir.json', await (await post('/projects/' + restored.id + '/ir?environment=DEV', {})).text());
+}
+
+async function generateClients() {
+  const projectId = await readFile('/qa/project-id', 'utf8');
+  const eventsProjectId = await readFile('/qa/events-project-id', 'utf8');
+  await writeFile('/qa/ir.json', await (await post('/projects/' + projectId + '/ir?environment=DEV', {})).text());
+  const artifact = await post('/codegen/artifact', {
+    projectId, environment: 'DEV', packageName: 'pilot', clientName: 'Orders', version: '1.0.0',
+  });
+  await writeFile('/qa/orders.zip', new Uint8Array(await artifact.arrayBuffer()));
+  await writeFile('/qa/kafka-ir.json', await (await post('/projects/' + eventsProjectId + '/ir?environment=DEV', {})).text());
 }
 
 if (process.argv[2] === 'export') {
@@ -95,6 +100,8 @@ if (process.argv[2] === 'export') {
 } else if (process.argv[2] === 'import') {
   await importOrders();
   await importEvents();
+} else if (process.argv[2] === 'generate') {
+  await generateClients();
 } else {
-  throw new Error('Choose export or import');
+  throw new Error('Choose export, import or generate');
 }

@@ -104,7 +104,7 @@ jobs:
         env:
           SDDP_UPGRADE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
 
-      - name: Verify isolated installation and offline Java build
+      - name: Verify isolated REST and Kafka installation, upgrade, and recovery
         run: bash scripts/test-airgap-install.sh
 
       - name: Upload test reports

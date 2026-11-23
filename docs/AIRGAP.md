@@ -76,4 +76,22 @@ docker compose --env-file images.env -f compose.yml -f compose.airgap.yml exec -
   pg_restore -U sddp --exit-on-error -d sddp_restore < sddp-backup.dump
 ```
 
-Verify the restored project and artifact against the restored database. Preserve the backup or restore it into a fresh database when an older application cannot read the upgraded schema.
+On the recovery test stand, add a Compose override named `compose.restore.yml` so SDDP connects to the restored database.
+
+```yaml
+services:
+  app:
+    environment:
+      SddP_DB_URL: jdbc:postgresql://postgres:5432/sddp_restore
+```
+
+Restart only the app with the update kit's image and the recovery override.
+
+```bash
+docker compose --env-file images.env -f compose.yml -f compose.airgap.yml -f compose.restore.yml \
+  up -d --no-build --pull never --no-deps app
+```
+
+Generate the REST artifact and Kafka clients again from the projects in the restored database. Build them offline, then run the Orders GET and POST requests and publish and receive an Orders event. Keep the pre-upgrade backup for rollback if the older app cannot read the upgraded schema.
+
+The automated acceptance scenario in `scripts/test-airgap-install.sh` performs those round trips after installation, after an offline image update, and after restoring the pre-upgrade backup.
