@@ -95,7 +95,7 @@ async page => {
   const update = await edited;
   expect(update.ok(), 'Editing the connection failed: HTTP ' + update.status());
 
-  await page.goto(url('/project.html?projectId=' + project.id + '&environment=DEV'));
+  await page.waitForURL(url('/project.html?projectId=' + project.id + '&tab=connections'));
   await page.locator('[data-tab="environments"]').click();
   await page.locator('#copySource').selectOption('DEV');
   await page.locator('#copyTarget').selectOption('PROD');
