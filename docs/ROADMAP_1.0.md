@@ -6,7 +6,7 @@
 
 - [x] Проверить сравнение контрактов, импорт изменённой версии и запросы сгенерированных клиентов Stripe Customers и GitLab Issues. Прогнать обновление и откат с OpenAPI-связью, созданной в 0.3.0.
 - [x] Опубликовать тег и образ 0.4.0. [Релизный CI](https://github.com/sysadminanywhere/sddp/actions/runs/45005262328) скачал опубликованный образ, проверил его SHA и прогнал браузерный сценарий на чистой PostgreSQL.
-- [ ] Опубликовать страницу GitHub Release для существующего тега.
+- [x] Опубликовать [GitHub Release для тега v0.4.0](https://github.com/sysadminanywhere/sddp/releases/tag/v0.4.0).
 
 ## Версионированный Java-артефакт
 
