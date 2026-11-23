@@ -131,6 +131,20 @@ async page => {
     'The generated client did not use the promoted endpoint and mapping');
   await page.locator('#codegenResult').getByText('GeneratedClient.java', { exact: true }).waitFor();
 
+  const artifactForm = page.getByRole('form', { name: 'Download Maven ZIP', exact: true });
+  await artifactForm.getByLabel('Artifact version', { exact: true }).fill('2.1.0-rc1');
+  const artifactResponse = page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/api/v1/codegen/artifact' && response.request().method() === 'POST'
+  );
+  const artifactDownload = page.waitForEvent('download');
+  await artifactForm.getByRole('button', { name: 'Download Maven ZIP', exact: true }).click();
+  const artifact = await artifactResponse;
+  expect(artifact.ok() && artifact.headers()['content-type'] === 'application/zip'
+    && artifact.request().postDataJSON().environment === 'PROD', 'Maven ZIP did not use the selected environment');
+  const download = await artifactDownload;
+  expect(download.suggestedFilename() === 'GeneratedClient-2.1.0-rc1.zip' && await download.failure() === null,
+    'The versioned Maven ZIP download failed');
+
   const bulk = await post(base + '/services', { name: 'bulk', serviceType: 'EXTERNAL' });
   await page.goto(url('/service.html?projectId=' + project.id + '&serviceId=' + bulk.id));
   await page.getByText('Import OpenAPI', { exact: true }).click();
@@ -178,5 +192,28 @@ async page => {
   const versions = await receiveJson(await page.request.get(url(base + '/services/' + bulk.id + '/apis')));
   expect(versions.filter(api => api.name === 'submit').map(api => api.version).sort().join(',') === '1,2',
     'Changed OpenAPI contract did not preserve both versions');
+
+  await page.getByText('Import AsyncAPI', { exact: true }).click();
+  const asyncApi = page.locator('#asyncApiPanel');
+  const file = asyncApi.getByLabel('AsyncAPI 3.0.0 file (JSON)', { exact: true });
+  const preview = asyncApi.getByRole('button', { name: 'Preview operations', exact: true });
+  const importEvents = asyncApi.getByRole('button', { name: 'Import selected operations', exact: true });
+  await file.setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{') });
+  await preview.click();
+  await asyncApi.getByText('Choose a valid JSON file.', { exact: true }).waitFor();
+  await file.setInputFiles('docs/examples/orders-events.asyncapi.json');
+  await preview.click();
+  await asyncApi.getByRole('checkbox', { name: 'receiveOrderCreated · Receive', exact: true }).uncheck();
+  await importEvents.click();
+  await asyncApi.getByText('Imported 1. Kept 0 existing operations.', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'publishOrderCreated', exact: true }).waitFor();
+  expect(await page.getByRole('link', { name: 'receiveOrderCreated', exact: true }).count() === 0,
+    'The unselected AsyncAPI operation was imported');
+  await file.setInputFiles('docs/examples/orders-events.asyncapi.json');
+  await preview.click();
+  await importEvents.click();
+  await asyncApi.getByText('Imported 1. Kept 1 existing operations.', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'receiveOrderCreated', exact: true }).waitFor();
+  await page.getByText('Receive · orders.created', { exact: false }).waitFor();
   return 'SDDP browser release check passed';
 }

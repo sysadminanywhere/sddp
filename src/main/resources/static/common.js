@@ -73,15 +73,19 @@
     }
   }
 
-  async function api(path, options = {}) {
-    const { method = 'GET', body, headers = {} } = options;
-    const request = { method, headers: { ...headers } };
+  async function request(path, { method = 'GET', body, headers = {} } = {}) {
+    const init = { method, headers: { ...headers } };
     if (body !== undefined) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = JSON.stringify(body);
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(body);
     }
-    const response = await fetch(path, request);
+    const response = await fetch(path, init);
     if (!response.ok) throw new Error(problemMessage(await response.text()));
+    return response;
+  }
+
+  async function api(path, options) {
+    const response = await request(path, options);
     if (response.status === 204) return null;
     const contentType = response.headers.get('content-type') || '';
     return contentType.includes('json') ? response.json() : response.text();
@@ -194,9 +198,8 @@
     setTimeout(() => URL.revokeObjectURL(link.href), 0);
   }
 
-  async function download(path, filename, options = {}) {
-    const response = await fetch(path, { method: options.method || 'GET' });
-    if (!response.ok) throw new Error(problemMessage(await response.text()));
+  async function download(path, filename, options) {
+    const response = await request(path, options);
     saveBlob(await response.blob(), filename);
   }
 

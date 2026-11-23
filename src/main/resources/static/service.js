@@ -61,6 +61,7 @@
     byId('openApiPreviewForm').action = openApiUrl + '/preview';
     byId('openApiImportForm').action = openApiUrl + '/import';
     byId('openApiPanel').hidden = false;
+    byId('asyncApiPanel').hidden = false;
     document.title = `${service.name} · ${project?.name || t('service.breadcrumbProject')} · SDDP`;
   }
 
@@ -73,12 +74,15 @@
     }
     byId('apiList').innerHTML = latest.map(item => {
       const viewUrl = apiUrl(serviceId, item.id, 'view');
+      const operation = item.eventOperation
+        ? `${t('asyncapi.' + item.eventOperation.direction.toLowerCase())} · ${item.eventOperation.topic}`
+        : item.httpOperation ? `${item.httpOperation.method} ${item.httpOperation.path}` : item.pattern;
       return `
       <article class="api-card">
         <header>
           <div>
             <h3><a class="api-title-link" href="${viewUrl}">${esc(item.name)}</a> <span class="badge accent">v${esc(item.version)}</span></h3>
-            <small>${esc(item.httpOperation ? `${item.httpOperation.method} ${item.httpOperation.path}` : item.pattern)} · request: ${fieldCount(item.requestSchema)} · response: ${fieldCount(item.responseSchema)}</small>
+            <small>${esc(operation)} · request: ${fieldCount(item.requestSchema)} · response: ${fieldCount(item.responseSchema)}</small>
           </div>
           <div class="button-row">
             <a class="button-link secondary" href="${viewUrl}">${t('service.open')}</a>
@@ -322,8 +326,110 @@
     });
   }
 
+  function bindAsyncApi() {
+    const fileInput = byId('asyncApiFile');
+    const previewButton = byId('asyncApiPreview');
+    const importForm = byId('asyncApiImportForm');
+    const importButton = byId('asyncApiImport');
+    const selection = byId('asyncApiSelection');
+    const message = byId('asyncApiStatus');
+    const operationsList = byId('asyncApiOperations');
+    const selectionLimit = 200;
+    let source;
+
+    function resetPreview() {
+      source = null;
+      operationsList.replaceChildren();
+      importForm.hidden = true;
+      message.textContent = '';
+    }
+
+    fileInput.addEventListener('change', resetPreview);
+    byId('asyncApiPreviewForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (previewButton.disabled) return;
+      resetPreview();
+      previewButton.disabled = true;
+      fileInput.disabled = true;
+      try {
+        const text = await fileInput.files[0].text();
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          throw new Error(t('asyncapi.invalidFile'));
+        }
+        const operations = parsed?.operations;
+        if (parsed?.asyncapi !== '3.0.0' || !operations || typeof operations !== 'object' || Array.isArray(operations)) {
+          throw new Error(t('asyncapi.invalidDocument'));
+        }
+        const entries = Object.entries(operations);
+        if (entries.length === 0) throw new Error(t('asyncapi.noOperations'));
+        const fragment = document.createDocumentFragment();
+        for (const [index, [name, operation]] of entries.entries()) {
+          const row = document.createElement('div');
+          row.className = 'button-row';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.name = 'operations';
+          checkbox.id = 'asyncapi-operation-' + index;
+          checkbox.value = name;
+          checkbox.checked = entries.length <= selectionLimit;
+          const label = document.createElement('label');
+          label.htmlFor = checkbox.id;
+          const action = operation?.action;
+          label.textContent = action === 'send' || action === 'receive' ? `${name} · ${t('asyncapi.' + action)}` : name;
+          row.append(checkbox, label);
+          fragment.append(row);
+        }
+        source = parsed;
+        operationsList.replaceChildren(fragment);
+        importForm.hidden = false;
+        message.textContent = t(entries.length > selectionLimit ? 'openapi.selectionLimit' : 'asyncapi.previewResult',
+          { count: entries.length });
+        byId('asyncApiOperationsLabel').focus();
+      } catch (error) {
+        message.textContent = error.message;
+      } finally {
+        previewButton.disabled = false;
+        fileInput.disabled = false;
+      }
+    });
+
+    importForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!source || !service || importButton.disabled) return;
+      const operations = new FormData(importForm).getAll('operations');
+      if (operations.length === 0 || operations.length > selectionLimit) {
+        message.textContent = t(operations.length === 0 ? 'openapi.selectOperation' : 'openapi.selectionLimit');
+        return;
+      }
+      importButton.disabled = true;
+      previewButton.disabled = true;
+      fileInput.disabled = true;
+      selection.disabled = true;
+      try {
+        const path = `${projectBase()}/services/${encodeURIComponent(serviceId)}/apis/asyncapi/import`;
+        const result = await api(path, { method: 'POST', body: { document: source, operations } });
+        resetPreview();
+        fileInput.value = '';
+        message.textContent = t('openapi.importResult', { created: result.created.length, existing: result.existing.length });
+        byId('asyncApiHeading').focus();
+        await load();
+      } catch (error) {
+        message.textContent = error.message;
+      } finally {
+        importButton.disabled = false;
+        previewButton.disabled = false;
+        fileInput.disabled = false;
+        selection.disabled = false;
+      }
+    });
+  }
+
   function bindEvents() {
     bindOpenApi();
+    bindAsyncApi();
     byId('reloadService').addEventListener('click', load);
     byId('serviceForm').addEventListener('submit', async event => {
       event.preventDefault();

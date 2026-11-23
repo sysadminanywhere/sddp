@@ -106,6 +106,28 @@
             </div>
           </form>
         </details>
+        <details class="section-gap" id="asyncApiPanel" hidden>
+          <summary id="asyncApiHeading" data-i18n="asyncapi.title">Import AsyncAPI</summary>
+          <form id="asyncApiPreviewForm" class="form section-gap" method="post" aria-labelledby="asyncApiHeading">
+            <div>
+              <label for="asyncApiFile" data-i18n="asyncapi.file">AsyncAPI 3.0.0 file (JSON)</label>
+              <input id="asyncApiFile" name="document" type="file" accept=".json,application/json" required>
+            </div>
+            <div class="button-row">
+              <button id="asyncApiPreview" type="submit" data-i18n="openapi.preview">Preview operations</button>
+            </div>
+          </form>
+          <p id="asyncApiStatus" class="hint" role="status"></p>
+          <form id="asyncApiImportForm" class="form" method="post" aria-labelledby="asyncApiOperationsLabel" hidden>
+            <fieldset id="asyncApiSelection">
+              <legend id="asyncApiOperationsLabel" data-i18n="openapi.operations" tabindex="-1">Operations to import</legend>
+              <div id="asyncApiOperations" class="list"></div>
+            </fieldset>
+            <div class="button-row">
+              <button id="asyncApiImport" type="submit" data-i18n="openapi.import">Import selected operations</button>
+            </div>
+          </form>
+        </details>
         <div id="apiList" class="api-grid section-gap"></div>
       </section>
     </div>

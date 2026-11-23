@@ -210,7 +210,7 @@ The [0.3.0 release](https://github.com/sysadminanywhere/sddp/releases/tag/v0.3.0
 
 The [0.4.0 release](https://github.com/sysadminanywhere/sddp/releases/tag/v0.4.0) adds contract comparison and explicit versioning on re-import, plus request serialization for the tested Stripe Customers and GitLab Issues operations.
 
-The [0.5.0 pilot](https://github.com/sysadminanywhere/sddp/releases/tag/v0.5.0) adds versioned REST Java artifacts, an offline installation kit, and an AsyncAPI 3.0.0 importer and Java generator for the Kafka Orders scenario. The Kafka pilot covers flat JSON payloads on a plaintext broker in an isolated test network. See the [isolated installation guide](docs/AIRGAP.md).
+The [0.5.0 pilot](https://github.com/sysadminanywhere/sddp/releases/tag/v0.5.0) adds versioned REST Java artifacts, an offline installation kit, and an AsyncAPI 3.0.0 importer and Java generator for the Kafka Orders scenario. Download the REST Maven ZIP from the project’s Build tab and import AsyncAPI JSON from the service page. The Kafka pilot covers flat JSON payloads on a plaintext broker in an isolated test network. See the [isolated installation guide](docs/AIRGAP.md).
 
 ### Core features
 - ✅ Project creation, viewing, listing, and deletion, plus CRUD for services, API operations, connections, and environments

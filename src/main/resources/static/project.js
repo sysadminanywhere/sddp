@@ -359,6 +359,15 @@
     });
   }
 
+  function codegenRequest() {
+    return {
+      projectId: state.projectId,
+      environment: state.environment,
+      packageName: byId('packageName').value.trim(),
+      clientName: byId('clientName').value.trim(),
+    };
+  }
+
   function bindEvents() {
     document.querySelectorAll('[data-goto]').forEach(button => {
       button.addEventListener('click', () => switchTab(button.dataset.goto));
@@ -441,12 +450,7 @@
       if (!requireProject()) return;
       try {
         status(t('project.generating'));
-        const body = {
-          projectId: state.projectId,
-          environment: state.environment,
-          packageName: byId('packageName').value.trim(),
-          clientName: byId('clientName').value.trim(),
-        };
+        const body = codegenRequest();
         const plugin = byId('pluginSelect').value === '' ? null : plugins[Number(byId('pluginSelect').value)];
         if (plugin) body.plugin = { language: plugin.language, deliveryType: plugin.deliveryType, executableTarget: plugin.executableTarget };
         const result = await api('/api/v1/codegen/generate', { method: 'POST', body });
@@ -459,6 +463,23 @@
         byId('resultBadge').textContent = t('project.error');
         byId('codegenResult').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`;
         status(error.message, 'error');
+      }
+    });
+    byId('artifactForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = byId('downloadArtifact');
+      if (button.disabled || !requireProject() || !byId('codegenForm').reportValidity()) return;
+      const body = { ...codegenRequest(), version: byId('artifactVersion').value };
+      const filename = `${body.clientName}-${body.version}.zip`;
+      button.disabled = true;
+      try {
+        status(t('project.generating'));
+        await window.SDDP.download('/api/v1/codegen/artifact', filename, { method: 'POST', body });
+        status(t('project.artifactDownloaded', { filename }));
+      } catch (error) {
+        status(error.message, 'error');
+      } finally {
+        button.disabled = false;
       }
     });
     byId('codegenResult').addEventListener('click', event => {

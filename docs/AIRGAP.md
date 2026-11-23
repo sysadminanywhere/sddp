@@ -43,7 +43,7 @@ The Compose overlay creates an internal network. Reach the application from the 
 
 ## Build the Java library
 
-Import the topology snapshot and download the Java project ZIP from `POST /api/v1/codegen/artifact`. Use the intended environment, then verify the extracted project and build the JAR.
+Import the topology snapshot, select the intended environment, and use **Download Maven ZIP** on the project’s **Build** tab. API clients can call `POST /api/v1/codegen/artifact`. Verify the extracted project and build the JAR.
 
 ```bash
 cd /path/to/extracted-project

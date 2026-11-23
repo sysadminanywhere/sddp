@@ -187,6 +187,18 @@
             <p id="pluginHint" class="hint" data-i18n="project.pluginHint">Built-in generator supports only REST, REQUEST_RESPONSE, and security_type=NONE.</p>
             <div class="button-row"><button type="submit" data-i18n="project.generate">Generate</button></div>
           </form>
+          <form id="artifactForm" class="form section-gap" method="post" action="/api/v1/codegen/artifact"
+                aria-labelledby="downloadArtifact" aria-describedby="artifactHint">
+            <p id="artifactHint" class="hint" data-i18n="project.artifactHint">The Maven ZIP uses the Java package, client name, and selected environment with the built-in REST generator.</p>
+            <label>
+              <span data-i18n="project.artifactVersion">Artifact version</span>
+              <input id="artifactVersion" name="version" value="1.0.0" required maxlength="64"
+                     pattern="[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}" autocomplete="off" spellcheck="false">
+            </label>
+            <div class="button-row">
+              <button id="downloadArtifact" type="submit" class="secondary" data-i18n="project.downloadArtifact">Download Maven ZIP</button>
+            </div>
+          </form>
         </section>
       </div>
 
