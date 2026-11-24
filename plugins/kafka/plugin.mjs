@@ -14,6 +14,19 @@ function identifier(value) {
   return typeof value === 'string' && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value) && !RESERVED.has(value);
 }
 
+function docText(description) {
+  if (typeof description !== 'string' || !description.trim()) return [];
+  return description.trim()
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('\\', '&#92;').replaceAll('*/', '*&#47;').replaceAll('@', '&#64;')
+    .split(/\r\n|\r|\n/).map(line => line.trimEnd());
+}
+
+function javadoc(lines) {
+  if (!lines.length) return '';
+  return '    /**\n' + lines.map(line => line ? '     * ' + line + '\n' : '     *\n').join('') + '     */\n';
+}
+
 function render(connection, method, className) {
   const event = method.event_operation;
   const settings = connection.connection_settings;
@@ -33,6 +46,12 @@ function render(connection, method, className) {
     throw new Error('The Kafka pilot requires a flat JSON payload with scalar properties');
   }
   const payload = properties.map(([name, property]) => SCALARS[property.type] + ' ' + name).join(', ');
+  const componentDocs = properties.flatMap(([name, property]) => {
+    const lines = docText(property.description);
+    if (lines.length) lines[0] = '@param ' + name + ' ' + lines[0];
+    return lines;
+  });
+  const payloadDocs = docText(schema.description).concat(componentDocs);
   const javaImports = event.direction === 'SEND'
     ? 'import org.apache.kafka.clients.producer.*;'
     : 'import org.apache.kafka.clients.consumer.*;\nimport java.time.Duration;\nimport java.util.List;\nimport java.util.Optional;';
@@ -80,9 +99,9 @@ public final class ${className} {
     private static final String BOOTSTRAP = "${settings.host}:${settings.port}";
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public record Payload(${payload}) { }
+${javadoc(payloadDocs)}    public record Payload(${payload}) { }
 
-    ${body}
+${javadoc(docText(method.description))}    ${body}
 }
 `;
 }

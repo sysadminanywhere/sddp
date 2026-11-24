@@ -51,7 +51,8 @@ public class IntermediateRepresentationBuilder {
         var method = new ApiModels.IrMethod(targetApi.getName(), targetApi.getPattern().name(),
             targetApi.getRequestSchema(), targetApi.getResponseSchema() == null ? mapper.createObjectNode() : targetApi.getResponseSchema(),
             "REST".equals(c.getTransportType()) ? targetApi.getHttpOperation() : null,
-            "KAFKA".equals(c.getTransportType()) ? targetApi.getEventOperation() : null);
+            "KAFKA".equals(c.getTransportType()) ? targetApi.getEventOperation() : null,
+            targetApi.getDescription());
         return new ApiModels.IrConnection(c.getSource().getName(), c.getTarget().getName(), c.getTransportType(), settings, List.of(method), c.getMappingRules());
     }
 

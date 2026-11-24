@@ -19,6 +19,7 @@ final class FlatJavaDto {
             return Optional.empty();
         }
         var components = new ArrayList<String>();
+        var documentation = new ArrayList<>(JavaDoc.text(schema.path("description").asText(null)));
         for (var property : schema.path("properties").properties().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             String name = property.getKey();
             String type = javaType(property.getValue());
@@ -26,14 +27,19 @@ final class FlatJavaDto {
                 return Optional.empty();
             }
             components.add(type + " " + name);
+            var description = JavaDoc.text(property.getValue().path("description").asText(null));
+            if (!description.isEmpty()) {
+                documentation.add("@param " + name + " " + description.getFirst());
+                documentation.addAll(description.subList(1, description.size()));
+            }
         }
         return Optional.of("""
             package %s;
 
-            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            %s@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
             @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
             public record %s(%s) { }
-            """.formatted(packageName, className, String.join(", ", components)));
+            """.formatted(packageName, JavaDoc.comment("", documentation), className, String.join(", ", components)));
     }
 
     private static String javaType(JsonNode schema) {

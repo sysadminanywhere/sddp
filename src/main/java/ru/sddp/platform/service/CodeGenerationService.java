@@ -47,12 +47,12 @@ public class CodeGenerationService {
             for (var connection : connections) {
             if (!"REST".equals(connection.transport_type())) throw new IllegalArgumentException("Built-in generator supports REST only; use a registered plugin for " + connection.transport_type());
             if (connection.methods().isEmpty()) throw new IllegalArgumentException("Connection has no methods");
-            var methods = new java.util.ArrayList<String>();
+            var methods = new LinkedHashMap<String, String>();
             for (var method : connection.methods()) {
                 if (!"REQUEST_RESPONSE".equals(method.pattern())) throw new IllegalArgumentException("Built-in REST generator supports REQUEST_RESPONSE only");
                 String name = method.method_name().replaceAll("[^A-Za-z0-9_$]", "_");
-                if (!name.matches("[A-Za-z_$][A-Za-z0-9_$]*") || javax.lang.model.SourceVersion.isKeyword(name) || methods.contains(name)) throw new IllegalArgumentException("Method name cannot be represented uniquely in Java: " + method.method_name());
-                methods.add(name);
+                if (!name.matches("[A-Za-z_$][A-Za-z0-9_$]*") || javax.lang.model.SourceVersion.isKeyword(name) || methods.containsKey(name)) throw new IllegalArgumentException("Method name cannot be represented uniquely in Java: " + method.method_name());
+                methods.put(name, JavaDoc.comment("    ", JavaDoc.text(method.description())));
             }
             String className = connections.size() == 1 ? request.clientName() : request.clientName() + (++index);
             StringWriter writer = new StringWriter();
@@ -83,7 +83,8 @@ public class CodeGenerationService {
             String mapping = connection.mapping_rules() == null || connection.mapping_rules().isNull() ? "" : connection.mapping_rules().toString();
             var model = new LinkedHashMap<String, Object>(Map.of("package_name", request.packageName(),
                 "client_name", className, "base_url", scheme + "://" + host + ":" + settings.path("port").asInt(),
-                "target_endpoint", endpoint, "methods", methods, "mapping_json", mapping,
+                "target_endpoint", endpoint, "methods", methods.entrySet().stream()
+                    .map(method -> Map.of("name", method.getKey(), "javadoc", method.getValue())).toList(), "mapping_json", mapping,
                 "timeout_ms", timeout, "retries", retries, "security_jwt", "JWT".equals(security)));
             if (http != null) model.put("http", httpTemplateModel(http));
             if (artifact && http != null && connection.methods().size() == 1) {

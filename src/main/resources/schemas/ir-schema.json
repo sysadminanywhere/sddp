@@ -42,6 +42,7 @@
                     "required": ["method_name", "pattern", "request_schema", "response_schema"],
                     "properties": {
                       "method_name": { "type": "string" },
+                      "description": { "type": "string" },
                       "pattern": { "type": "string", "enum": ["REQUEST_RESPONSE", "PUB_SUB"] },
                       "request_schema": { "type": "object" },
                       "response_schema": { "type": "object" },

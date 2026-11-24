@@ -40,7 +40,11 @@ public final class ApiModels {
     public record IrConnection(String client_name, String target_service_name, String transport_type, JsonNode connection_settings, List<IrMethod> methods, @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) JsonNode mapping_rules) { }
     public record IrMethod(String method_name, String pattern, JsonNode request_schema, JsonNode response_schema,
                            @JsonInclude(JsonInclude.Include.NON_NULL) HttpOperation http_operation,
-                           @JsonInclude(JsonInclude.Include.NON_NULL) EventOperation event_operation) {
+                           @JsonInclude(JsonInclude.Include.NON_NULL) EventOperation event_operation,
+                           @JsonInclude(JsonInclude.Include.NON_NULL) String description) {
+        public IrMethod(String name, String pattern, JsonNode request, JsonNode response, HttpOperation http, EventOperation event) {
+            this(name, pattern, request, response, http, event, null);
+        }
         public IrMethod(String name, String pattern, JsonNode request, JsonNode response) {
             this(name, pattern, request, response, null, null);
         }
